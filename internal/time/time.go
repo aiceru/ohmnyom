@@ -12,7 +12,11 @@ type Time struct {
 	time.Time
 }
 
-// Date returns time.Date that rounded down nsec to milliseconds, due to limitation of firestore's time data type.
+func Now() Time {
+	return Time{time.Now()}
+}
+
+// Date returns time.Date that rounded down nsec to microsecond, due to limitation of firestore's time data type.
 func Date(year int, month time.Month, day int, hour int, min int, sec int, nsec int, loc *time.Location) Time {
 	return Time{
 		time.Date(year, month, day, hour, min, sec, nsec/int(time.Microsecond), loc),

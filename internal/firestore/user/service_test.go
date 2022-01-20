@@ -3,31 +3,13 @@ package user
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"cloud.google.com/go/firestore"
 	"github.com/stretchr/testify/assert"
 	"ohmnyom/domain/user"
-	"ohmnyom/internal/path"
 	"ohmnyom/internal/time"
 )
-
-func TestNewService(t *testing.T) {
-	a := assert.New(t)
-	ctx := context.TODO()
-	prj := "ohmnyom"
-	cred := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
-
-	service := NewService(ctx, prj, cred)
-	a.NotNil(service)
-
-	service = NewService(ctx, "", cred)
-	a.Nil(service)
-
-	service = NewService(ctx, prj, "")
-	a.Nil(service)
-}
 
 func TestService_Delete(t *testing.T) {
 	ctx := context.TODO()
@@ -118,13 +100,13 @@ func TestService_GetByEmail(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    []*user.User
+		want    *user.User
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{"empty param", fields{cli}, args{ctx, ""}, nil, assert.Error},
 		{"not found", fields{cli}, args{ctx, "email-notfound@test.com"}, nil, assert.Error},
-		{"user1", fields{cli}, args{ctx, users[0].Email}, []*user.User{users[0]}, assert.NoError},
-		{"user2", fields{cli}, args{ctx, users[1].Email}, []*user.User{users[1]}, assert.NoError},
+		{"user1", fields{cli}, args{ctx, users[0].Email}, users[0], assert.NoError},
+		{"user2", fields{cli}, args{ctx, users[1].Email}, users[1], assert.NoError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

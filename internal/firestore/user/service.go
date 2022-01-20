@@ -2,11 +2,9 @@ package user
 
 import (
 	"context"
-	"os"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"ohmnyom/domain/user"
@@ -22,16 +20,7 @@ type Service struct {
 	client *firestore.Client
 }
 
-func NewService(ctx context.Context, projectId, credfile string) user.Service {
-	cred, err := os.ReadFile(credfile)
-	if err != nil {
-		return nil
-	}
-	client, err := firestore.NewClient(ctx, projectId, option.WithCredentialsJSON(cred))
-	if err != nil {
-		return nil
-	}
-
+func NewService(ctx context.Context, client *firestore.Client) user.Service {
 	return &Service{
 		client: client,
 	}
@@ -46,14 +35,13 @@ func (s *Service) Get(ctx context.Context, id string) (*user.User, error) {
 		}
 		return u, nil
 	} else if status.Code(err) == codes.NotFound {
-		return nil, errors.NewNotFoundError("User{id: %v}", id)
+		return nil, errors.NewNotFoundError("User{Id: %v}", id)
 	} else {
 		return nil, errors.New("%v", err)
 	}
 }
 
-func (s *Service) GetByEmail(ctx context.Context, email string) ([]*user.User, error) {
-	ret := make([]*user.User, 0)
+func (s *Service) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	iter := s.client.Collection(userCollection).Where("email", is, email).Documents(ctx)
 	for {
 		doc, err := iter.Next()
@@ -66,14 +54,11 @@ func (s *Service) GetByEmail(ctx context.Context, email string) ([]*user.User, e
 		u := &user.User{}
 		if suberr := doc.DataTo(u); suberr != nil {
 			// best effort
-			return ret, errors.NewInvalidFormatError("%v", suberr)
+			return nil, errors.NewInvalidFormatError("%v", suberr)
 		}
-		ret = append(ret, u)
+		return u, nil
 	}
-	if len(ret) < 1 {
-		return nil, errors.NewNotFoundError("User{email: %v}", email)
-	}
-	return ret, nil
+	return nil, errors.NewNotFoundError("User{Email: %v}", email)
 }
 
 func (s *Service) GetByOAuth(ctx context.Context, oauthType user.OAuthType, oauthId string) (*user.User, error) {
@@ -93,7 +78,9 @@ func (s *Service) GetByOAuth(ctx context.Context, oauthType user.OAuthType, oaut
 		if suberr := doc.DataTo(u); suberr != nil {
 			return nil, errors.NewInvalidFormatError("%v", suberr)
 		}
-		return u, nil
+		if u.OAuthType == oauthType && u.OAuthId == oauthId {
+			return u, nil
+		}
 	}
 	return nil, errors.NewNotFoundError("User{OAuthType: %v, OAuthId: %v}", oauthType, oauthId)
 }

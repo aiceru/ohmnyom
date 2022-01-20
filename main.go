@@ -4,18 +4,28 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
 
 	"github.com/aiceru/protonyom/gonyom"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/gzip"
 	"ohmnyom/domain/user"
-	userStore "ohmnyom/internal/firestore/user"
+	"ohmnyom/internal/firestore"
+	userdb "ohmnyom/internal/firestore/user"
 )
 
 func main() {
+	os.Setenv("FIRESTORE_EMULATOR_HOST", "localhost:8989")
 	ctx := context.Background()
-	userService := userStore.NewService(ctx, "ohmnyom", "ohmnyom-77df675cb827.json")
+
+	// firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	firestoreClient := firestore.NewEmulatorClient(ctx)
+	userService := userdb.NewService(ctx, firestoreClient)
+
 	userServer := user.NewServer(userService)
 
 	s := grpc.NewServer(grpc.ForceServerCodec(encoding.GetCodec(gzip.Name)))
