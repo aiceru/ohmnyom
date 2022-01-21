@@ -12,8 +12,12 @@ import (
 	"google.golang.org/grpc/encoding/gzip"
 	"ohmnyom/domain/user"
 	"ohmnyom/internal/firestore"
-	userdb "ohmnyom/internal/firestore/user"
+	userstore "ohmnyom/internal/firestore/user"
+	"ohmnyom/internal/interceptor"
+	"ohmnyom/internal/jwt"
 )
+
+type CtxKeyType string
 
 func main() {
 	os.Setenv("FIRESTORE_EMULATOR_HOST", "localhost:8989")
@@ -24,11 +28,17 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 	firestoreClient := firestore.NewEmulatorClient(ctx)
-	userService := userdb.NewService(ctx, firestoreClient)
 
-	userServer := user.NewServer(userService)
+	jwtManager := jwt.NewManager([]byte("alsdfkjas;dflkjw;elkfj;ldkfjsdlf"))
+	authInterceptor := interceptor.NewAuthInterceptor(jwtManager, "/protonyom.SignApi/SignUp")
+	userStore := userstore.New(ctx, firestoreClient)
 
-	s := grpc.NewServer(grpc.ForceServerCodec(encoding.GetCodec(gzip.Name)))
+	userServer := user.NewServer(userStore)
+
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(authInterceptor.Unary()),
+		grpc.ForceServerCodec(encoding.GetCodec(gzip.Name)),
+	)
 	gonyom.RegisterSignApiServer(s, userServer)
 
 	lis, err := net.Listen("tcp", ":50051")

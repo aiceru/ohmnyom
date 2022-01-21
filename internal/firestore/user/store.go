@@ -14,19 +14,20 @@ import (
 const (
 	userCollection = "users"
 	is             = "=="
+	arrayContains  = "array-contains"
 )
 
-type Service struct {
+type Store struct {
 	client *firestore.Client
 }
 
-func NewService(ctx context.Context, client *firestore.Client) user.Service {
-	return &Service{
+func New(ctx context.Context, client *firestore.Client) user.Store {
+	return &Store{
 		client: client,
 	}
 }
 
-func (s *Service) Get(ctx context.Context, id string) (*user.User, error) {
+func (s *Store) Get(ctx context.Context, id string) (*user.User, error) {
 	snapshot, err := s.client.Collection(userCollection).Doc(id).Get(ctx)
 	if status.Code(err) == codes.OK {
 		u := &user.User{}
@@ -41,7 +42,7 @@ func (s *Service) Get(ctx context.Context, id string) (*user.User, error) {
 	}
 }
 
-func (s *Service) GetByEmail(ctx context.Context, email string) (*user.User, error) {
+func (s *Store) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	iter := s.client.Collection(userCollection).Where("email", is, email).Documents(ctx)
 	for {
 		doc, err := iter.Next()
@@ -61,11 +62,9 @@ func (s *Service) GetByEmail(ctx context.Context, email string) (*user.User, err
 	return nil, errors.NewNotFoundError("User{Email: %v}", email)
 }
 
-func (s *Service) GetByOAuth(ctx context.Context, oauthType user.OAuthType, oauthId string) (*user.User, error) {
+func (s *Store) GetByOAuth(ctx context.Context, info *user.OAuthInfo) (*user.User, error) {
 	iter := s.client.Collection(userCollection).
-		Where("oauthid", is, oauthId).
-		Where("oauthtype", is, oauthType).
-		Documents(ctx)
+		Where("oauthinfo", arrayContains, info).Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -78,15 +77,13 @@ func (s *Service) GetByOAuth(ctx context.Context, oauthType user.OAuthType, oaut
 		if suberr := doc.DataTo(u); suberr != nil {
 			return nil, errors.NewInvalidFormatError("%v", suberr)
 		}
-		if u.OAuthType == oauthType && u.OAuthId == oauthId {
-			return u, nil
-		}
+		return u, nil
 	}
-	return nil, errors.NewNotFoundError("User{OAuthType: %v, OAuthId: %v}", oauthType, oauthId)
+	return nil, errors.NewNotFoundError("User{OAuthInfo: %v}", info)
 }
 
 // Put overwrites doc if exists.
-func (s *Service) Put(ctx context.Context, user *user.User) error {
+func (s *Store) Put(ctx context.Context, user *user.User) error {
 	if user == nil {
 		return errors.NewInvalidParamError("user: %v", user)
 	}
@@ -98,7 +95,7 @@ func (s *Service) Put(ctx context.Context, user *user.User) error {
 }
 
 // Delete does nothing and returns no error if doc not exists.
-func (s *Service) Delete(ctx context.Context, id string) error {
+func (s *Store) Delete(ctx context.Context, id string) error {
 	if _, err := s.client.Collection(userCollection).Doc(id).Delete(ctx); err != nil {
 		return errors.New("%v", err)
 	}

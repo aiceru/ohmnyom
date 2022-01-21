@@ -6,73 +6,86 @@ import (
 	"github.com/aiceru/protonyom/gonyom"
 	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
+	"ohmnyom/internal"
 	"ohmnyom/internal/errors"
 	"ohmnyom/internal/time"
 )
 
-type OAuthType int32
+type Provider int32
+
+const CtxKeyUid = internal.ContextKey("uid")
 
 const (
-	OAuthType_NONE OAuthType = iota
-	OAuthType_GOOGLE
+	OAuthType_GOOGLE Provider = iota
 	OAuthTYpe_KAKAO
 )
 
+type OAuthInfo struct {
+	Provider Provider `firestore:"provider"`
+	Id       string   `firestore:"id,omitempty"`
+}
+
+func (o *OAuthInfo) ToProto() *gonyom.OAuthInfo {
+	return &gonyom.OAuthInfo{
+		Provider: gonyom.OAuthInfo_Provider(o.Provider),
+		Id:       o.Id,
+	}
+}
+
+func OAuthInfoFromProto(info *gonyom.OAuthInfo) *OAuthInfo {
+	if info.Id == "" {
+		return nil
+	}
+	return &OAuthInfo{
+		Provider: Provider(info.Provider),
+		Id:       info.Id,
+	}
+}
+
 type User struct {
-	Id        string    `firestore:"id"`
-	Email     string    `firestore:"email,omitempty"`
-	Name      string    `firestore:"name,omitempty"`
-	Password  string    `firestore:"password,omitempty"`
-	Photourl  string    `firestore:"photourl,omitempty"`
-	OAuthType OAuthType `firestore:"oauthtype"`
-	OAuthId   string    `firestore:"oauthid,omitempty"`
-	SignedUp  time.Time `firestore:"signedup"`
-	Pets      []string  `firestore:"pets,omitempty"`
+	Id        string       `firestore:"id"`
+	Name      string       `firestore:"name,omitempty"`
+	Email     string       `firestore:"email,omitempty"`
+	Password  string       `firestore:"password,omitempty"`
+	OAuthInfo []*OAuthInfo `firestore:"oauthinfo,omitempty"`
+	Photourl  string       `firestore:"photourl,omitempty"`
+	SignedUp  time.Time    `firestore:"signedup"`
+	Pets      []string     `firestore:"pets,omitempty"`
 }
 
-func NewUser(email, name, hashed string) (*User, error) {
-	if email == "" || hashed == "" || name == "" {
-		return nil, errors.NewInvalidParamError("email [%v], hashed [%v], name [%v]", email, hashed, name)
+func NewUser(name, email, hashed string, info *OAuthInfo, photourl string) (*User, error) {
+	if name == "" || email == "" {
+		return nil, errors.NewInvalidParamError("email [%v], name [%v]", email, name)
+	}
+	if hashed == "" && info == nil {
+		return nil, errors.NewInvalidParamError("hashed [%v], info [%v]", hashed, info)
 	}
 	return &User{
 		Id:        genUid(),
-		Email:     email,
 		Name:      name,
+		Email:     email,
 		Password:  hashed,
-		Photourl:  "",
-		OAuthType: OAuthType_NONE,
-		OAuthId:   "",
-		SignedUp:  time.Now(),
-		Pets:      nil,
-	}, nil
-}
-
-func NewOAuthUser(email string, oauthtype OAuthType, oauthid, name, photourl string) (*User, error) {
-	if email == "" || oauthtype == OAuthType_NONE || oauthid == "" || name == "" {
-		return nil, errors.NewInvalidParamError("email [%v], oauthtype [%v], oauthid [%v], name [%v]",
-			email, oauthtype, oauthid, name)
-	}
-	return &User{
-		Id:        genUid(),
-		Email:     email,
-		Name:      name,
-		Password:  "",
+		OAuthInfo: []*OAuthInfo{info},
 		Photourl:  photourl,
-		OAuthType: oauthtype,
-		OAuthId:   oauthid,
-		SignedUp:  time.Now(),
+		SignedUp:  time.Time{},
 		Pets:      nil,
 	}, nil
 }
 
-func (u *User) Proto() *gonyom.Account {
+func (u *User) ToProto() *gonyom.Account {
+	infos := make([]*gonyom.OAuthInfo, len(u.OAuthInfo))
+	for i, info := range u.OAuthInfo {
+		infos[i] = info.ToProto()
+	}
+	if len(infos) < 1 {
+		infos = nil
+	}
 	return &gonyom.Account{
 		Id:        u.Id,
-		Email:     u.Email,
 		Name:      u.Name,
+		Email:     u.Email,
+		Oauthinfo: infos,
 		Photourl:  u.Photourl,
-		Oauthtype: gonyom.OAuthType(u.OAuthType),
-		Oauthid:   u.OAuthId,
 		Signedup:  u.SignedUp.Proto(),
 		Pets:      u.Pets,
 	}
@@ -94,10 +107,10 @@ func compareHashAndPassword(hashed string, plain string) error {
 	return nil
 }
 
-type Service interface {
+type Store interface {
 	Get(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	GetByOAuth(ctx context.Context, oauthType OAuthType, oauthId string) (*User, error)
+	GetByOAuth(ctx context.Context, info *OAuthInfo) (*User, error)
 	Put(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id string) error
 }

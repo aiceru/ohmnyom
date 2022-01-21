@@ -5,24 +5,29 @@ import (
 
 	"github.com/aiceru/protonyom/gonyom"
 	"ohmnyom/internal/errors"
+	"ohmnyom/internal/jwt"
 )
 
 type Server struct {
-	service Service
-	// gonyom.SignApiServer
+	userStore Store
+	*jwt.Manager
 	gonyom.UnimplementedSignApiServer
 }
 
-func NewServer(service Service) *Server {
+func NewServer(service Store) *Server {
 	return &Server{
-		service: service,
+		userStore: service,
 	}
 }
 
-func (s *Server) signUpWithEmailCred(
-	ctx context.Context, email, password, name string) (*User, error) {
+func (s *Server) signUpWithEmail(
+	ctx context.Context, name, email, password, photourl string) (*User, error) {
+	if name == "" || email == "" || password == "" {
+		return nil, errors.NewInvalidParamError("name [%v], email [%v], password [%v]",
+			name, email, password)
+	}
 
-	_, err := s.service.GetByEmail(ctx, email)
+	_, err := s.userStore.GetByEmail(ctx, email)
 	if err == nil { // email exist
 		return nil, errors.NewAlreadyExistsError("email [%v]", email)
 	} else {
@@ -37,26 +42,26 @@ func (s *Server) signUpWithEmailCred(
 		return nil, err
 	}
 
-	u, err := NewUser(email, name, hashed)
+	u, err := NewUser(name, email, hashed, nil, photourl)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.service.Put(ctx, u); err != nil {
+	if err := s.userStore.Put(ctx, u); err != nil {
 		return nil, err
 	}
 
 	return u, nil
 }
 
-func (s *Server) signUpWithOAuthCred(
-	ctx context.Context, email string, cred *gonyom.SignUpRequest_OauthCred, name string, photourl string) (
+func (s *Server) signUpWithOAuthInfo(
+	ctx context.Context, name, email string, info *OAuthInfo, photourl string) (
 	*User, error) {
+	if name == "" || email == "" || info == nil {
+		return nil, errors.NewInvalidParamError("name [%v], email [%v], info [%v]")
+	}
 
-	oauthtype := OAuthType(cred.OauthCred.GetOauthtype())
-	oauthid := cred.OauthCred.GetOauthid()
-
-	_, err := s.service.GetByEmail(ctx, email)
+	_, err := s.userStore.GetByEmail(ctx, email)
 	if err == nil { // email exist
 		return nil, errors.NewAlreadyExistsError("email [%v]", email)
 	} else {
@@ -66,9 +71,9 @@ func (s *Server) signUpWithOAuthCred(
 		}
 	}
 
-	_, err = s.service.GetByOAuth(ctx, oauthtype, oauthid)
+	_, err = s.userStore.GetByOAuth(ctx, info)
 	if err == nil { // already exists
-		return nil, errors.NewAlreadyExistsError("oauthtype [%v], oauthid [%v]")
+		return nil, errors.NewAlreadyExistsError("info [%v]", info)
 	} else {
 		var notfound *errors.NotFoundError
 		if !errors.As(err, &notfound) {
@@ -76,12 +81,12 @@ func (s *Server) signUpWithOAuthCred(
 		}
 	}
 
-	u, err := NewOAuthUser(email, oauthtype, oauthid, name, photourl)
+	u, err := NewUser(name, email, "", info, photourl)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.service.Put(ctx, u); err != nil {
+	if err := s.userStore.Put(ctx, u); err != nil {
 		return nil, err
 	}
 
@@ -89,33 +94,35 @@ func (s *Server) signUpWithOAuthCred(
 }
 
 func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.SignUpReply, error) {
+	var u *User
+	var err error
+
 	name := in.GetName()
 	email := in.GetEmail()
 	photourl := in.GetPhotourl()
 
 	switch cred := in.GetCredential().(type) {
-
 	case *gonyom.SignUpRequest_Password:
-		ret, err := s.signUpWithEmailCred(ctx, email, cred.Password, name)
-		if err != nil {
-			return nil, errors.GrpcError(err)
-		}
-		return &gonyom.SignUpReply{Account: ret.Proto()}, nil
-
-	case *gonyom.SignUpRequest_OauthCred:
-		ret, err := s.signUpWithOAuthCred(ctx, email, cred, name, photourl)
-		if err != nil {
-			return nil, errors.GrpcError(err)
-		}
-		return &gonyom.SignUpReply{Account: ret.Proto()}, nil
-
+		u, err = s.signUpWithEmail(ctx, name, email, cred.Password, photourl)
+	case *gonyom.SignUpRequest_Oauthinfo:
+		u, err = s.signUpWithOAuthInfo(ctx, name, email, OAuthInfoFromProto(cred.Oauthinfo), photourl)
 	default:
-		return nil, errors.GrpcError(errors.NewUnsupportedError("type %v", cred))
+		err = errors.NewUnsupportedError("type %v", cred)
 	}
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	token, err := s.NewAuthToken(u.Id)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	return &gonyom.SignUpReply{Account: u.ToProto(), Token: token}, nil
 }
 
-func (s *Server) signInWithEmailCred(ctx context.Context, email, password string) (*User, error) {
-	u, err := s.service.GetByEmail(ctx, email)
+func (s *Server) signInWithEmail(ctx context.Context, email, password string) (*User, error) {
+	u, err := s.userStore.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -127,13 +134,8 @@ func (s *Server) signInWithEmailCred(ctx context.Context, email, password string
 	return u, nil
 }
 
-func (s *Server) signInWithOAuthCred(
-	ctx context.Context,
-	cred *gonyom.SignInRequest_OauthCred) (*User, error) {
-	authtype := OAuthType(cred.OauthCred.GetOauthtype())
-	authid := cred.OauthCred.GetOauthid()
-
-	u, err := s.service.GetByOAuth(ctx, authtype, authid)
+func (s *Server) signInWithOAuthInfo(ctx context.Context, info *OAuthInfo) (*User, error) {
+	u, err := s.userStore.GetByOAuth(ctx, info)
 	if err != nil {
 		return nil, err
 	}
@@ -142,23 +144,27 @@ func (s *Server) signInWithOAuthCred(
 }
 
 func (s *Server) SignIn(ctx context.Context, in *gonyom.SignInRequest) (*gonyom.SignInReply, error) {
+	var u *User
+	var err error
 	email := in.GetEmail()
+
 	switch cred := in.GetCredential().(type) {
 	case *gonyom.SignInRequest_Password:
-		u, err := s.signInWithEmailCred(ctx, email, cred.Password)
-		if err != nil {
-			return nil, errors.GrpcError(err)
-		}
-		return &gonyom.SignInReply{Account: u.Proto()}, nil
-	case *gonyom.SignInRequest_OauthCred:
-		u, err := s.signInWithOAuthCred(ctx, cred)
-		if err != nil {
-			return nil, errors.GrpcError(err)
-		}
-		return &gonyom.SignInReply{Account: u.Proto()}, nil
+		u, err = s.signInWithEmail(ctx, email, cred.Password)
+	case *gonyom.SignInRequest_Oauthinfo:
+		u, err = s.signInWithOAuthInfo(ctx, OAuthInfoFromProto(cred.Oauthinfo))
 	default:
-		return nil, errors.GrpcError(errors.NewUnsupportedError("type %v", cred))
+		err = errors.NewUnsupportedError("type %v", cred)
 	}
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	token, err := s.NewAuthToken(u.Id)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.SignInReply{Account: u.ToProto(), Token: token}, nil
 }
 
 func (s *Server) SignOut(ctx context.Context, in *gonyom.EmptyParams) (*gonyom.EmptyParams, error) {
