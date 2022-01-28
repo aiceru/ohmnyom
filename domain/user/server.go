@@ -9,14 +9,16 @@ import (
 )
 
 type Server struct {
-	userStore Store
-	*jwt.Manager
+	userStore  Store
+	jwtManager *jwt.Manager
 	gonyom.UnimplementedSignApiServer
+	gonyom.UnimplementedAccountApiServer
 }
 
-func NewServer(service Store) *Server {
+func NewServer(service Store, jwtManager *jwt.Manager) *Server {
 	return &Server{
-		userStore: service,
+		userStore:  service,
+		jwtManager: jwtManager,
 	}
 }
 
@@ -55,7 +57,7 @@ func (s *Server) signUpWithEmail(
 }
 
 func (s *Server) signUpWithOAuthInfo(
-	ctx context.Context, name, email string, info *OAuthInfo, photourl string) (
+	ctx context.Context, name, email string, info *OAuthInfo, provider, photourl string) (
 	*User, error) {
 	if name == "" || email == "" || info == nil {
 		return nil, errors.NewInvalidParamError("name [%v], email [%v], info [%v]")
@@ -71,7 +73,7 @@ func (s *Server) signUpWithOAuthInfo(
 		}
 	}
 
-	_, err = s.userStore.GetByOAuth(ctx, info)
+	_, err = s.userStore.GetByOAuth(ctx, info, provider)
 	if err == nil { // already exists
 		return nil, errors.NewAlreadyExistsError("info [%v]", info)
 	} else {
@@ -81,7 +83,7 @@ func (s *Server) signUpWithOAuthInfo(
 		}
 	}
 
-	u, err := NewUser(name, email, "", info, photourl)
+	u, err := NewUser(name, email, "", map[string]*OAuthInfo{provider: info}, photourl)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +95,33 @@ func (s *Server) signUpWithOAuthInfo(
 	return u, nil
 }
 
-func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.SignUpReply, error) {
+func (s *Server) signInWithEmail(ctx context.Context, email, password string) (*User, error) {
+	u, err := s.userStore.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	if u.Password == "" {
+		return nil, errors.NewAuthenticationError("password not set")
+	}
+
+	if err := compareHashAndPassword(u.Password, password); err != nil {
+		return nil, errors.NewAuthenticationError("password not match")
+	}
+
+	return u, nil
+}
+
+func (s *Server) signInWithOAuthInfo(ctx context.Context, info *OAuthInfo, provider string) (*User, error) {
+	u, err := s.userStore.GetByOAuth(ctx, info, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	return u, nil
+}
+
+func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.SignReply, error) {
 	var u *User
 	var err error
 
@@ -105,7 +133,8 @@ func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.
 	case *gonyom.SignUpRequest_Password:
 		u, err = s.signUpWithEmail(ctx, name, email, cred.Password, photourl)
 	case *gonyom.SignUpRequest_Oauthinfo:
-		u, err = s.signUpWithOAuthInfo(ctx, name, email, OAuthInfoFromProto(cred.Oauthinfo), photourl)
+		provider := in.GetOauthprovider()
+		u, err = s.signUpWithOAuthInfo(ctx, name, email, OAuthInfoFromProto(cred.Oauthinfo), provider, photourl)
 	default:
 		err = errors.NewUnsupportedError("type %v", cred)
 	}
@@ -113,46 +142,24 @@ func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.
 		return nil, errors.GrpcError(err)
 	}
 
-	token, err := s.NewAuthToken(u.Id)
+	token, err := s.jwtManager.NewAuthToken(u.Id)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
-	return &gonyom.SignUpReply{Account: u.ToProto(), Token: token}, nil
+	return &gonyom.SignReply{Account: u.ToProto(), Token: token}, nil
 }
 
-func (s *Server) signInWithEmail(ctx context.Context, email, password string) (*User, error) {
-	u, err := s.userStore.GetByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := compareHashAndPassword(u.Password, password); err != nil {
-		return nil, errors.GrpcError(err)
-	}
-
-	return u, nil
-}
-
-func (s *Server) signInWithOAuthInfo(ctx context.Context, info *OAuthInfo) (*User, error) {
-	u, err := s.userStore.GetByOAuth(ctx, info)
-	if err != nil {
-		return nil, err
-	}
-
-	return u, nil
-}
-
-func (s *Server) SignIn(ctx context.Context, in *gonyom.SignInRequest) (*gonyom.SignInReply, error) {
+func (s *Server) SignIn(ctx context.Context, in *gonyom.SignInRequest) (*gonyom.SignReply, error) {
 	var u *User
 	var err error
-	email := in.GetEmail()
 
 	switch cred := in.GetCredential().(type) {
-	case *gonyom.SignInRequest_Password:
-		u, err = s.signInWithEmail(ctx, email, cred.Password)
+	case *gonyom.SignInRequest_Emailcred:
+		u, err = s.signInWithEmail(ctx, cred.Emailcred.Email, cred.Emailcred.Password)
 	case *gonyom.SignInRequest_Oauthinfo:
-		u, err = s.signInWithOAuthInfo(ctx, OAuthInfoFromProto(cred.Oauthinfo))
+		provider := in.GetOauthprovider()
+		u, err = s.signInWithOAuthInfo(ctx, OAuthInfoFromProto(cred.Oauthinfo), provider)
 	default:
 		err = errors.NewUnsupportedError("type %v", cred)
 	}
@@ -160,13 +167,33 @@ func (s *Server) SignIn(ctx context.Context, in *gonyom.SignInRequest) (*gonyom.
 		return nil, errors.GrpcError(err)
 	}
 
-	token, err := s.NewAuthToken(u.Id)
+	token, err := s.jwtManager.NewAuthToken(u.Id)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	return &gonyom.SignInReply{Account: u.ToProto(), Token: token}, nil
+	return &gonyom.SignReply{Account: u.ToProto(), Token: token}, nil
 }
 
 func (s *Server) SignOut(ctx context.Context, in *gonyom.EmptyParams) (*gonyom.EmptyParams, error) {
 	return &gonyom.EmptyParams{}, nil
+}
+
+func (s *Server) Get(ctx context.Context, request *gonyom.GetAccountRequest) (*gonyom.GetAccountReply, error) {
+	id := request.GetId()
+	u, err := s.userStore.Get(ctx, id)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.GetAccountReply{Account: u.ToProto()}, nil
+}
+
+func (s *Server) Update(ctx context.Context, request *gonyom.UpdateAccountRequest) (*gonyom.UpdateAccountReply, error) {
+	// u := request.GetAccount()
+	// s.userStore.Put(ctx, u)
+	return nil, nil
+}
+
+func (s *Server) Delete(ctx context.Context, request *gonyom.DeleteAccountRequest) (*gonyom.DeleteAccountReply, error) {
+	// TODO implement me
+	panic("implement me")
 }

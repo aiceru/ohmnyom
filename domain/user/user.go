@@ -11,24 +11,22 @@ import (
 	"ohmnyom/internal/time"
 )
 
-type Provider int32
-
 const CtxKeyUid = internal.ContextKey("uid")
 
 const (
-	OAuthType_GOOGLE Provider = iota
-	OAuthTYpe_KAKAO
+	OAuthProviderGoogle = "google"
+	OAuthProviderKakao  = "kakao"
 )
 
 type OAuthInfo struct {
-	Provider Provider `firestore:"provider"`
-	Id       string   `firestore:"id,omitempty"`
+	Id    string `firestore:"id,omitempty"`
+	Email string `firestore:"email,omitempty"`
 }
 
 func (o *OAuthInfo) ToProto() *gonyom.OAuthInfo {
 	return &gonyom.OAuthInfo{
-		Provider: gonyom.OAuthInfo_Provider(o.Provider),
-		Id:       o.Id,
+		Id:    o.Id,
+		Email: o.Email,
 	}
 }
 
@@ -37,45 +35,46 @@ func OAuthInfoFromProto(info *gonyom.OAuthInfo) *OAuthInfo {
 		return nil
 	}
 	return &OAuthInfo{
-		Provider: Provider(info.Provider),
-		Id:       info.Id,
+		Id:    info.Id,
+		Email: info.Email,
 	}
 }
 
 type User struct {
-	Id        string       `firestore:"id"`
-	Name      string       `firestore:"name,omitempty"`
-	Email     string       `firestore:"email,omitempty"`
-	Password  string       `firestore:"password,omitempty"`
-	OAuthInfo []*OAuthInfo `firestore:"oauthinfo,omitempty"`
-	Photourl  string       `firestore:"photourl,omitempty"`
-	SignedUp  time.Time    `firestore:"signedup"`
-	Pets      []string     `firestore:"pets,omitempty"`
+	Id        string                `firestore:"id"`
+	Name      string                `firestore:"name,omitempty"`
+	Email     string                `firestore:"email,omitempty"`
+	Password  string                `firestore:"password,omitempty"`
+	OAuthInfo map[string]*OAuthInfo `firestore:"oauthinfo,omitempty"`
+	Photourl  string                `firestore:"photourl,omitempty"`
+	SignedUp  time.Time             `firestore:"signedup"`
+	Pets      []string              `firestore:"pets,omitempty"`
 }
 
-func NewUser(name, email, hashed string, info *OAuthInfo, photourl string) (*User, error) {
+func NewUser(name, email, hashed string, infos map[string]*OAuthInfo, photourl string) (*User, error) {
 	if name == "" || email == "" {
 		return nil, errors.NewInvalidParamError("email [%v], name [%v]", email, name)
 	}
-	if hashed == "" && info == nil {
-		return nil, errors.NewInvalidParamError("hashed [%v], info [%v]", hashed, info)
+	if hashed == "" && len(infos) < 1 {
+		return nil, errors.NewInvalidParamError("hashed [%v], info [%v]", hashed, infos)
 	}
-	return &User{
+	u := &User{
 		Id:        genUid(),
 		Name:      name,
 		Email:     email,
 		Password:  hashed,
-		OAuthInfo: []*OAuthInfo{info},
+		OAuthInfo: infos,
 		Photourl:  photourl,
-		SignedUp:  time.Time{},
+		SignedUp:  time.Now(),
 		Pets:      nil,
-	}, nil
+	}
+	return u, nil
 }
 
 func (u *User) ToProto() *gonyom.Account {
-	infos := make([]*gonyom.OAuthInfo, len(u.OAuthInfo))
-	for i, info := range u.OAuthInfo {
-		infos[i] = info.ToProto()
+	infos := make(map[string]*gonyom.OAuthInfo)
+	for provider, info := range u.OAuthInfo {
+		infos[provider] = info.ToProto()
 	}
 	if len(infos) < 1 {
 		infos = nil
@@ -88,6 +87,25 @@ func (u *User) ToProto() *gonyom.Account {
 		Photourl:  u.Photourl,
 		Signedup:  u.SignedUp.Proto(),
 		Pets:      u.Pets,
+	}
+}
+
+func FromProto(account *gonyom.Account) *User {
+	infos := make(map[string]*OAuthInfo)
+	for provider, info := range account.Oauthinfo {
+		infos[provider] = OAuthInfoFromProto(info)
+	}
+	if len(infos) < 1 {
+		infos = nil
+	}
+	// except password, signedup
+	return &User{
+		Id:        account.Id,
+		Name:      account.Name,
+		Email:     account.Email,
+		OAuthInfo: infos,
+		Photourl:  account.Photourl,
+		Pets:      account.Pets,
 	}
 }
 
@@ -110,7 +128,7 @@ func compareHashAndPassword(hashed string, plain string) error {
 type Store interface {
 	Get(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	GetByOAuth(ctx context.Context, info *OAuthInfo) (*User, error)
+	GetByOAuth(ctx context.Context, info *OAuthInfo, provider string) (*User, error)
 	Put(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id string) error
 }

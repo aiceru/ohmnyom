@@ -62,9 +62,9 @@ func (s *Store) GetByEmail(ctx context.Context, email string) (*user.User, error
 	return nil, errors.NewNotFoundError("User{Email: %v}", email)
 }
 
-func (s *Store) GetByOAuth(ctx context.Context, info *user.OAuthInfo) (*user.User, error) {
+func (s *Store) GetByOAuth(ctx context.Context, info *user.OAuthInfo, provider string) (*user.User, error) {
 	iter := s.client.Collection(userCollection).
-		Where("oauthinfo", arrayContains, info).Documents(ctx)
+		Where("oauthinfo."+provider, is, info).Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -87,10 +87,23 @@ func (s *Store) Put(ctx context.Context, user *user.User) error {
 	if user == nil {
 		return errors.NewInvalidParamError("user: %v", user)
 	}
-	_, err := s.client.Collection(userCollection).Doc(user.Id).Set(ctx, user)
+	_, err := s.client.Collection(userCollection).Doc(user.Id).Create(ctx, user)
 	if err != nil {
 		return errors.New("%v", err)
 	}
+	return nil
+}
+
+func (s *Store) Update(ctx context.Context, user *user.User) error {
+	// if user == nil {
+	// 	return errors.NewInvalidParamError("user: %v", user)
+	// }
+	// _, err := s.client.Collection(userCollection).Doc(user.Id).Update(ctx, []firestore.Update{
+	// 	Path: ""
+	// })
+	// if err != nil {
+	// 	return errors.New("%v", err)
+	// }
 	return nil
 }
 

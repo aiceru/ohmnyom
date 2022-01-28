@@ -1,6 +1,7 @@
-package main
+package firestore
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
@@ -9,11 +10,13 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"cloud.google.com/go/firestore"
 )
 
 const firestoreEmulatorHostStr = "FIRESTORE_EMULATOR_HOST"
 
-func killEmulator() {
+func KillEmulator() {
 	cmd := exec.Command("bash", "-c", "ps aux | grep emulator | grep -v grep | awk '{print $2}'")
 	out, _ := cmd.Output()
 	var err error
@@ -31,14 +34,19 @@ func killEmulator() {
 		}
 	}
 	for i := 0; i < len(pids); i++ {
-		_ = syscall.Kill(-pids[i], syscall.SIGKILL)
+		process, err := os.FindProcess(pids[i])
+		if err == nil {
+			// log.Printf("killing process %v", process.Pid)
+			if err := process.Kill(); err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
 }
 
 func RunEmulator() {
-	killEmulator()
 	cmd := exec.Command("/Users/wooseok/google-cloud-sdk/bin/gcloud", "beta", "emulators", "firestore", "start",
-		"--host-port=localhost:8989")
+		"--host-port=localhost")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	stderr, err := cmd.StderrPipe()
@@ -69,6 +77,7 @@ func RunEmulator() {
 				// log.Print(d)
 				if strings.Contains(d, "Dev App Server is now running.") {
 					wg.Done()
+					break
 				}
 
 				pos := strings.Index(d, firestoreEmulatorHostStr+"=")
@@ -81,4 +90,12 @@ func RunEmulator() {
 	}()
 
 	wg.Wait()
+}
+
+func NewEmulatorClient(ctx context.Context) *firestore.Client {
+	client, err := firestore.NewClient(ctx, "test")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return client
 }

@@ -1,18 +1,13 @@
-// +build test
-
 package user
 
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"cloud.google.com/go/firestore"
 	"github.com/stretchr/testify/assert"
 	"ohmnyom/domain/user"
-	fs "ohmnyom/internal/firestore"
-	"ohmnyom/internal/path"
 	"ohmnyom/internal/time"
 )
 
@@ -137,9 +132,8 @@ func TestService_GetByOAuth(t *testing.T) {
 		client *firestore.Client
 	}
 	type args struct {
-		ctx       context.Context
-		oauthType user.OAuthType
-		oauthId   string
+		ctx  context.Context
+		info *user.OAuthInfo
 	}
 	tests := []struct {
 		name    string
@@ -148,35 +142,33 @@ func TestService_GetByOAuth(t *testing.T) {
 		want    *user.User
 		wantErr assert.ErrorAssertionFunc
 	}{
-		// {"empty param", fields{cli}, args{ctx, users[1].OAuthType, ""}, nil, assert.Error},
-		// {"none type", fields{cli}, args{ctx, user.OAuthType_NONE, users[1].OAuthId}, nil, assert.Error},
-		// {"not found", fields{cli}, args{ctx, user.OAuthTYpe_KAKAO, users[1].OAuthId}, nil, assert.Error},
-		// {"user1", fields{cli}, args{ctx, users[1].OAuthType, users[1].OAuthId}, users[1], assert.NoError},
-		// {"user2", fields{cli}, args{ctx, users[2].OAuthType, users[2].OAuthId}, users[2], assert.NoError},
+		{"empty param", fields{cli}, args{ctx, nil}, nil, assert.Error},
+		{"not found", fields{cli}, args{ctx, &user.OAuthInfo{
+			Provider: user.ProviderGoogle,
+			Id:       "not-found-id",
+		}}, nil, assert.Error},
+		{"user1", fields{cli}, args{ctx, users[1].OAuthInfo[0]}, users[1], assert.NoError},
+		{"user2", fields{cli}, args{ctx, users[2].OAuthInfo[0]}, users[2], assert.NoError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Store{
 				client: tt.fields.client,
 			}
-			got, err := s.GetByOAuth(tt.args.ctx, tt.args.oauthType, tt.args.oauthId)
-			if !tt.wantErr(t, err, fmt.Sprintf("GetByOAuth(%v, %v, %v)", tt.args.ctx, tt.args.oauthType, tt.args.oauthId)) {
+			got, err := s.GetByOAuth(tt.args.ctx, tt.args.info)
+			if !tt.wantErr(t, err, fmt.Sprintf("GetByOAuth(%v, %v)", tt.args.ctx, tt.args.info)) {
 				return
 			}
-			assert.Equalf(t, tt.want, got, "GetByOAuth(%v, %v, %v)", tt.args.ctx, tt.args.oauthType, tt.args.oauthId)
+			assert.Equalf(t, tt.want, got, "GetByOAuth(%v, %v, %v)", tt.args.ctx, tt.args.info)
 		})
 	}
 }
 
 func TestService_Put(t *testing.T) {
 	ctx := context.TODO()
-	cli, err := fs.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// cli := newTestClient(ctx)
-	// setupTestData(ctx, cli)
-	// defer teardownTestData(ctx, cli)
+	cli := newTestClient(ctx)
+	setupTestData(ctx, cli)
+	defer teardownTestData(ctx, cli)
 
 	type fields struct {
 		client *firestore.Client
@@ -199,7 +191,10 @@ func TestService_Put(t *testing.T) {
 			Email:    "email-temp@test.com",
 			Password: "password-temp",
 			OAuthInfo: []*user.OAuthInfo{
-				{OAuthType: user.OAuthType_GOOGLE, OAuthId: "googleid-temp"},
+				{
+					Provider: user.ProviderGoogle,
+					Id:       "temp-googleid-test",
+				},
 			},
 			Photourl: "photourl-temp",
 			SignedUp: time.Time{},

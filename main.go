@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net"
-	"os"
 
 	"github.com/aiceru/protonyom/gonyom"
 	"google.golang.org/grpc"
@@ -17,23 +16,27 @@ import (
 	"ohmnyom/internal/jwt"
 )
 
-type CtxKeyType string
-
 func main() {
-	os.Setenv("FIRESTORE_EMULATOR_HOST", "localhost:8989")
 	ctx := context.Background()
 
 	// firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
+	firestore.KillEmulator()
+	firestore.RunEmulator()
+	// defer firestore.KillEmulator()
 	firestoreClient := firestore.NewEmulatorClient(ctx)
 
-	jwtManager := jwt.NewManager([]byte("alsdfkjas;dflkjw;elkfj;ldkfjsdlf"))
-	authInterceptor := interceptor.NewAuthInterceptor(jwtManager, "/protonyom.SignApi/SignUp")
+	jwtManager := jwt.NewManager([]byte("temp-test-secret"))
+	authInterceptor := interceptor.NewAuthInterceptor(
+		jwtManager,
+		"/protonyom.SignApi/SignUp",
+		"/protonyom.SignApi/SignIn",
+	)
 	userStore := userstore.New(ctx, firestoreClient)
 
-	userServer := user.NewServer(userStore)
+	userServer := user.NewServer(userStore, jwtManager)
 
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(authInterceptor.Unary()),
