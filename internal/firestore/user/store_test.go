@@ -132,8 +132,9 @@ func TestService_GetByOAuth(t *testing.T) {
 		client *firestore.Client
 	}
 	type args struct {
-		ctx  context.Context
-		info *user.OAuthInfo
+		ctx      context.Context
+		info     *user.OAuthInfo
+		provider string
 	}
 	tests := []struct {
 		name    string
@@ -142,20 +143,30 @@ func TestService_GetByOAuth(t *testing.T) {
 		want    *user.User
 		wantErr assert.ErrorAssertionFunc
 	}{
-		{"empty param", fields{cli}, args{ctx, nil}, nil, assert.Error},
+		{"empty param", fields{cli}, args{ctx, nil, "google"}, nil, assert.Error},
 		{"not found", fields{cli}, args{ctx, &user.OAuthInfo{
-			Provider: user.ProviderGoogle,
-			Id:       "not-found-id",
-		}}, nil, assert.Error},
-		{"user1", fields{cli}, args{ctx, users[1].OAuthInfo[0]}, users[1], assert.NoError},
-		{"user2", fields{cli}, args{ctx, users[2].OAuthInfo[0]}, users[2], assert.NoError},
+			Id:    "not-found-id",
+			Email: "not-found-email",
+		}, "google"}, nil, assert.Error},
+		{"not found provider", fields{cli},
+			args{ctx, users[1].OAuthInfo[user.OAuthProviderGoogle], "noprovider"}, nil, assert.Error},
+		{"user1",
+			fields{cli},
+			args{ctx, users[1].OAuthInfo[user.OAuthProviderGoogle], user.OAuthProviderGoogle},
+			users[1],
+			assert.NoError},
+		{"user2",
+			fields{cli},
+			args{ctx, users[2].OAuthInfo[user.OAuthProviderKakao], user.OAuthProviderKakao},
+			users[2],
+			assert.NoError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Store{
 				client: tt.fields.client,
 			}
-			got, err := s.GetByOAuth(tt.args.ctx, tt.args.info)
+			got, err := s.GetByOAuth(tt.args.ctx, tt.args.info, tt.args.provider)
 			if !tt.wantErr(t, err, fmt.Sprintf("GetByOAuth(%v, %v)", tt.args.ctx, tt.args.info)) {
 				return
 			}
@@ -184,16 +195,16 @@ func TestService_Put(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{"empty param", fields{cli}, args{ctx, nil}, assert.Error},
-		{"duplicate(update)", fields{cli}, args{ctx, users[0]}, assert.NoError},
+		{"duplicate(update)", fields{cli}, args{ctx, users[0]}, assert.Error},
 		{"new", fields{cli}, args{ctx, &user.User{
 			Id:       "id-temp",
 			Name:     "name-temp",
 			Email:    "email-temp@test.com",
 			Password: "password-temp",
-			OAuthInfo: []*user.OAuthInfo{
-				{
-					Provider: user.ProviderGoogle,
-					Id:       "temp-googleid-test",
+			OAuthInfo: map[string]*user.OAuthInfo{
+				"google": {
+					Id:    "temp-googleid-test",
+					Email: "temp-googleemail-test",
 				},
 			},
 			Photourl: "photourl-temp",

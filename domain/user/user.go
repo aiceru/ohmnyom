@@ -80,13 +80,14 @@ func (u *User) ToProto() *gonyom.Account {
 		infos = nil
 	}
 	return &gonyom.Account{
-		Id:        u.Id,
-		Name:      u.Name,
-		Email:     u.Email,
-		Oauthinfo: infos,
-		Photourl:  u.Photourl,
-		Signedup:  u.SignedUp.Proto(),
-		Pets:      u.Pets,
+		Id:          u.Id,
+		Name:        u.Name,
+		Email:       u.Email,
+		HasPassword: u.Password != "",
+		Oauthinfo:   infos,
+		Photourl:    u.Photourl,
+		Signedup:    u.SignedUp.Proto(),
+		Pets:        u.Pets,
 	}
 }
 

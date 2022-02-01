@@ -19,10 +19,10 @@ var users = []*user.User{
 		Id:    "id-testuser2",
 		Name:  "name-testuser2",
 		Email: "email-testuser2@test.com",
-		OAuthInfo: []*user.OAuthInfo{
-			{
-				Provider: user.ProviderGoogle,
-				Id:       "id-google-testuser2",
+		OAuthInfo: map[string]*user.OAuthInfo{
+			"google": {
+				Id:    "id-google-testuser2",
+				Email: "email-google-testuer2",
 			},
 		},
 		Photourl: "photourl-testuser2",
@@ -33,10 +33,10 @@ var users = []*user.User{
 		Id:    "id-testuser3",
 		Name:  "name-testuser3",
 		Email: "email-testuser3@test.com",
-		OAuthInfo: []*user.OAuthInfo{
-			{
-				Provider: user.ProviderKakao,
-				Id:       "id-kakao-testuser3",
+		OAuthInfo: map[string]*user.OAuthInfo{
+			"kakao": {
+				Id:    "id-kakao-testuser3",
+				Email: "email-kakao-testuser3",
 			},
 		},
 		Photourl: "photourl-testuser3",
