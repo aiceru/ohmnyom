@@ -15,9 +15,9 @@ type Server struct {
 	gonyom.UnimplementedAccountApiServer
 }
 
-func NewServer(service Store, jwtManager *jwt.Manager) *Server {
+func NewServer(store Store, jwtManager *jwt.Manager) *Server {
 	return &Server{
-		userStore:  service,
+		userStore:  store,
 		jwtManager: jwtManager,
 	}
 }
@@ -136,7 +136,7 @@ func (s *Server) SignUp(ctx context.Context, in *gonyom.SignUpRequest) (*gonyom.
 		provider := in.GetOauthprovider()
 		u, err = s.signUpWithOAuthInfo(ctx, name, email, OAuthInfoFromProto(cred.Oauthinfo), provider, photourl)
 	default:
-		err = errors.NewUnsupportedError("type %v", cred)
+		err = errors.NewUnimplementedError("type %v", cred)
 	}
 	if err != nil {
 		return nil, errors.GrpcError(err)
@@ -161,7 +161,7 @@ func (s *Server) SignIn(ctx context.Context, in *gonyom.SignInRequest) (*gonyom.
 		provider := in.GetOauthprovider()
 		u, err = s.signInWithOAuthInfo(ctx, OAuthInfoFromProto(cred.Oauthinfo), provider)
 	default:
-		err = errors.NewUnsupportedError("type %v", cred)
+		err = errors.NewUnimplementedError("type %v", cred)
 	}
 	if err != nil {
 		return nil, errors.GrpcError(err)
@@ -188,9 +188,35 @@ func (s *Server) Get(ctx context.Context, request *gonyom.GetAccountRequest) (*g
 }
 
 func (s *Server) Update(ctx context.Context, request *gonyom.UpdateAccountRequest) (*gonyom.UpdateAccountReply, error) {
-	// u := request.GetAccount()
-	// s.userStore.Put(ctx, u)
-	return nil, nil
+	uid := ctx.Value(CtxKeyUid).(string)
+	if uid == "" {
+		return nil, errors.GrpcError(errors.NewAuthenticationError("UID not provided"))
+	}
+	user, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	path := request.GetPath()
+	value := request.GetValue()
+
+	if path == "password" {
+		value, err = hashPassword(value)
+		if err != nil {
+			return nil, errors.GrpcError(err)
+		}
+	}
+
+	err = s.userStore.Update(ctx, user, path, value)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	user, err = s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	return &gonyom.UpdateAccountReply{Account: user.ToProto()}, nil
 }
 
 func (s *Server) Delete(ctx context.Context, request *gonyom.DeleteAccountRequest) (*gonyom.DeleteAccountReply, error) {

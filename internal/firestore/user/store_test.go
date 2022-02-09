@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/stretchr/testify/assert"
 	"ohmnyom/domain/user"
-	"ohmnyom/internal/time"
 )
 
 func TestService_Delete(t *testing.T) {
@@ -196,7 +196,7 @@ func TestService_Put(t *testing.T) {
 	}{
 		{"empty param", fields{cli}, args{ctx, nil}, assert.Error},
 		{"duplicate(update)", fields{cli}, args{ctx, users[0]}, assert.Error},
-		{"new", fields{cli}, args{ctx, &user.User{
+		{name: "new", fields: fields{cli}, args: args{ctx, &user.User{
 			Id:       "id-temp",
 			Name:     "name-temp",
 			Email:    "email-temp@test.com",
@@ -210,7 +210,7 @@ func TestService_Put(t *testing.T) {
 			Photourl: "photourl-temp",
 			SignedUp: time.Time{},
 			Pets:     nil,
-		}}, assert.NoError},
+		}}, wantErr: assert.NoError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

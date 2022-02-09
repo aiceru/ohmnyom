@@ -82,7 +82,6 @@ func (s *Store) GetByOAuth(ctx context.Context, info *user.OAuthInfo, provider s
 	return nil, errors.NewNotFoundError("User{OAuthInfo: %v}", info)
 }
 
-// Put overwrites doc if exists.
 func (s *Store) Put(ctx context.Context, user *user.User) error {
 	if user == nil {
 		return errors.NewInvalidParamError("user: %v", user)
@@ -94,22 +93,55 @@ func (s *Store) Put(ctx context.Context, user *user.User) error {
 	return nil
 }
 
-func (s *Store) Update(ctx context.Context, user *user.User) error {
-	// if user == nil {
-	// 	return errors.NewInvalidParamError("user: %v", user)
-	// }
-	// _, err := s.client.Collection(userCollection).Doc(user.Id).Update(ctx, []firestore.Update{
-	// 	Path: ""
-	// })
-	// if err != nil {
-	// 	return errors.New("%v", err)
-	// }
+func (s *Store) Update(ctx context.Context, u *user.User, path, value string) error {
+	if u == nil {
+		return errors.NewInvalidParamError("u: %v", u)
+	}
+
+	if !user.IsUpdatableField(path) {
+		return errors.NewInvalidParamError("path %v is not updatable", path)
+	}
+
+	_, err := s.client.Collection(userCollection).Doc(u.Id).Update(ctx, []firestore.Update{
+		{Path: path, Value: value},
+	})
+	if err != nil {
+		return errors.New("%v", err)
+	}
 	return nil
 }
 
 // Delete does nothing and returns no error if doc not exists.
 func (s *Store) Delete(ctx context.Context, id string) error {
 	if _, err := s.client.Collection(userCollection).Doc(id).Delete(ctx); err != nil {
+		return errors.New("%v", err)
+	}
+	return nil
+}
+
+func (s *Store) AddPet(ctx context.Context, id, petId string) error {
+	if id == "" || petId == "" {
+		return errors.NewInvalidParamError("id: %v, petId: %v", id, petId)
+	}
+	_, err := s.client.Collection(userCollection).Doc(id).Update(ctx,
+		[]firestore.Update{
+			{Path: "pets", Value: firestore.ArrayUnion(petId)},
+		})
+	if err != nil {
+		return errors.New("%v", err)
+	}
+	return nil
+}
+
+func (s *Store) DeletePet(ctx context.Context, id, petId string) error {
+	if id == "" || petId == "" {
+		return errors.NewInvalidParamError("id: %v, petId: %v", id, petId)
+	}
+	_, err := s.client.Collection(userCollection).Doc(id).Update(ctx,
+		[]firestore.Update{
+			{Path: "pets", Value: firestore.ArrayRemove(petId)},
+		})
+	if err != nil {
 		return errors.New("%v", err)
 	}
 	return nil

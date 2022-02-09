@@ -2,13 +2,13 @@ package user
 
 import (
 	"context"
+	"time"
 
 	"github.com/aiceru/protonyom/gonyom"
 	"github.com/rs/xid"
 	"golang.org/x/crypto/bcrypt"
 	"ohmnyom/internal"
 	"ohmnyom/internal/errors"
-	"ohmnyom/internal/time"
 )
 
 const CtxKeyUid = internal.ContextKey("uid")
@@ -51,6 +51,17 @@ type User struct {
 	Pets      []string              `firestore:"pets,omitempty"`
 }
 
+var updatableFields = []string{"name", "password", "photourl"}
+
+func IsUpdatableField(field string) bool {
+	for _, f := range updatableFields {
+		if f == field {
+			return true
+		}
+	}
+	return false
+}
+
 func NewUser(name, email, hashed string, infos map[string]*OAuthInfo, photourl string) (*User, error) {
 	if name == "" || email == "" {
 		return nil, errors.NewInvalidParamError("email [%v], name [%v]", email, name)
@@ -65,7 +76,7 @@ func NewUser(name, email, hashed string, infos map[string]*OAuthInfo, photourl s
 		Password:  hashed,
 		OAuthInfo: infos,
 		Photourl:  photourl,
-		SignedUp:  time.Now(),
+		SignedUp:  time.Now().UTC(),
 		Pets:      nil,
 	}
 	return u, nil
@@ -86,7 +97,7 @@ func (u *User) ToProto() *gonyom.Account {
 		HasPassword: u.Password != "",
 		Oauthinfo:   infos,
 		Photourl:    u.Photourl,
-		Signedup:    u.SignedUp.Proto(),
+		Signedup:    u.SignedUp.Unix(),
 		Pets:        u.Pets,
 	}
 }
@@ -116,7 +127,10 @@ func genUid() string {
 
 func hashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	return string(hash), err
+	if err != nil {
+		return "", errors.NewInternalError("%v", err)
+	}
+	return string(hash), nil
 }
 
 func compareHashAndPassword(hashed string, plain string) error {
@@ -131,5 +145,8 @@ type Store interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByOAuth(ctx context.Context, info *OAuthInfo, provider string) (*User, error)
 	Put(ctx context.Context, user *User) error
+	Update(ctx context.Context, user *User, path, value string) error
 	Delete(ctx context.Context, id string) error
+	AddPet(ctx context.Context, id, petId string) error
+	DeletePet(ctx context.Context, id, petId string) error
 }
