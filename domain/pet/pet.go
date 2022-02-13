@@ -75,7 +75,7 @@ func (p *Pet) ToProto() *gonyom.Pet {
 
 type Store interface {
 	Get(ctx context.Context, id string) (*Pet, error)
-	GetList(ctx context.Context, ids []string) ([]*Pet, error)
+	GetList(ctx context.Context, ids []string) (List, error)
 	Put(ctx context.Context, pet *Pet) error
 	Update(ctx context.Context, id string, pathValues map[string]interface{}) error
 	Delete(ctx context.Context, id string) error

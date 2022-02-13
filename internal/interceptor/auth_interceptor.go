@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -56,6 +57,7 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
+		log.Println(info.FullMethod)
 		if _, ok := i.bypass[info.FullMethod]; ok {
 			return handler(ctx, req)
 		}

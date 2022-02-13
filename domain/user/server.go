@@ -179,8 +179,11 @@ func (s *Server) SignOut(ctx context.Context, in *gonyom.EmptyParams) (*gonyom.E
 }
 
 func (s *Server) Get(ctx context.Context, request *gonyom.GetAccountRequest) (*gonyom.GetAccountReply, error) {
-	id := request.GetId()
-	u, err := s.userStore.Get(ctx, id)
+	uid := ctx.Value(CtxKeyUid).(string)
+	if uid == "" {
+		return nil, errors.GrpcError(errors.NewAuthenticationError("UID not provided"))
+	}
+	u, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}

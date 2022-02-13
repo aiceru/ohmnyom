@@ -33,7 +33,7 @@ func (s *Server) GetFamilies(ctx context.Context, request *gonyom.GetFamiliesReq
 	}, nil
 }
 
-func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*gonyom.PetListReply, error) {
+func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*gonyom.AddPetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	newPet := fromProto(request.GetPet())
 	newPet.Id = newPetId()
@@ -45,16 +45,21 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 		return nil, errors.GrpcError(err)
 	}
 
-	pets, err := s.getPetListOf(ctx, uid)
+	account, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	return &gonyom.PetListReply{
-		Pets: pets.ToProto(),
+	pets, err := s.petStore.GetList(ctx, account.Pets)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.AddPetReply{
+		Account: account.ToProto(),
+		Pets:    pets.ToProto(),
 	}, nil
 }
 
-func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest) (*gonyom.PetListReply, error) {
+func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest) (*gonyom.UpdatePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	newPet := fromProto(request.GetPet())
 
@@ -68,16 +73,20 @@ func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest
 		return nil, errors.GrpcError(err)
 	}
 
-	pets, err := s.getPetListOf(ctx, uid)
+	account, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	return &gonyom.PetListReply{
+	pets, err := s.petStore.GetList(ctx, account.Pets)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.UpdatePetReply{
 		Pets: pets.ToProto(),
 	}, nil
 }
 
-func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest) (*gonyom.PetListReply, error) {
+func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest) (*gonyom.DeletePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	oldPetId := request.GetPetId()
 
@@ -88,16 +97,21 @@ func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest
 		return nil, errors.GrpcError(err)
 	}
 
-	pets, err := s.getPetListOf(ctx, uid)
+	account, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	return &gonyom.PetListReply{
-		Pets: pets.ToProto(),
+	pets, err := s.petStore.GetList(ctx, account.Pets)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.DeletePetReply{
+		Account: account.ToProto(),
+		Pets:    pets.ToProto(),
 	}, nil
 }
 
-func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListRequest) (*gonyom.PetListReply, error) {
+func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListRequest) (*gonyom.GetPetListReply, error) {
 	petIds := request.GetPetIds()
 
 	pets, err := s.petStore.GetList(ctx, petIds)
@@ -105,19 +119,7 @@ func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListReque
 		return nil, errors.GrpcError(err)
 	}
 
-	return &gonyom.PetListReply{
+	return &gonyom.GetPetListReply{
 		Pets: List(pets).ToProto(),
 	}, nil
-}
-
-func (s *Server) getPetListOf(ctx context.Context, uid string) (List, error) {
-	authUser, err := s.userStore.Get(ctx, uid)
-	if err != nil {
-		return nil, err
-	}
-	pets, err := s.petStore.GetList(ctx, authUser.Pets)
-	if err != nil {
-		return nil, err
-	}
-	return pets, nil
 }
