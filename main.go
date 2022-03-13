@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -18,6 +19,8 @@ import (
 	userstore "ohmnyom/internal/firestore/user"
 	"ohmnyom/internal/interceptor"
 	"ohmnyom/internal/jwt"
+	"ohmnyom/internal/path"
+	"ohmnyom/internal/storage/googleStorage"
 )
 
 func printAddress() {
@@ -33,6 +36,7 @@ func printAddress() {
 
 func main() {
 	ctx := context.Background()
+	gcpCredentialJsonPath := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
 	printAddress()
 
 	// firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
@@ -50,13 +54,13 @@ func main() {
 		"/protonyom.SignApi/SignUp",
 		"/protonyom.SignApi/SignIn",
 		"/protonyom.PetApi/GetFamilies",
-		// "/protonyom.PetApi/GetSpecies",
 	)
 	userStore := userstore.New(ctx, firestoreClient)
 	petStore := petstore.New(ctx, firestoreClient)
+	storage := googleStorage.New(ctx, gcpCredentialJsonPath)
 
 	userServer := user.NewServer(userStore, jwtManager)
-	petServer := pet.NewServer(petStore, userStore, jwtManager)
+	petServer := pet.NewServer(petStore, userStore, storage, jwtManager)
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(authInterceptor.Unary()),

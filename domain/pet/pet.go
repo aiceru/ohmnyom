@@ -2,6 +2,8 @@ package pet
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aiceru/protonyom/gonyom"
@@ -14,6 +16,10 @@ const (
 	adoptedField  = "adopted"
 	familyField   = "family"
 	speciesField  = "species"
+
+	storageSep         = "/"
+	storageDirPet      = "pets"
+	storageDirProfiles = "profiles"
 )
 
 type List []*Pet
@@ -71,6 +77,11 @@ func (p *Pet) ToProto() *gonyom.Pet {
 		Family:   p.Family,
 		Species:  p.Species,
 	}
+}
+
+func (p *Pet) NewProfilePath() string {
+	timeStr := strconv.FormatInt(time.Now().UTC().UnixNano(), 16)
+	return strings.Join([]string{storageDirPet, p.Id, storageDirProfiles, timeStr}, storageSep)
 }
 
 type Store interface {

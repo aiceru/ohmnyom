@@ -8,19 +8,23 @@ import (
 	"ohmnyom/i18n"
 	"ohmnyom/internal/errors"
 	"ohmnyom/internal/jwt"
+	"ohmnyom/internal/storage"
+	"ohmnyom/internal/storage/googleStorage"
 )
 
 type Server struct {
 	petStore   Store
 	userStore  user.Store
+	storage    storage.Storage
 	jwtManager *jwt.Manager
 	gonyom.UnimplementedPetApiServer
 }
 
-func NewServer(store Store, userStore user.Store, jwtManager *jwt.Manager) *Server {
+func NewServer(store Store, userStore user.Store, storage storage.Storage, jwtManager *jwt.Manager) *Server {
 	return &Server{
 		petStore:   store,
 		userStore:  userStore,
+		storage:    storage,
 		jwtManager: jwtManager,
 	}
 }
@@ -121,5 +125,42 @@ func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListReque
 
 	return &gonyom.GetPetListReply{
 		Pets: List(pets).ToProto(),
+	}, nil
+}
+
+func (s *Server) UploadPetProfile(ctx context.Context, request *gonyom.UploadPetProfileRequest) (*gonyom.UploadPetProfileReply, error) {
+	uid := ctx.Value(user.CtxKeyUid).(string)
+	petId := request.GetPetId()
+	contentType := request.GetContentType()
+	content := request.GetContent()
+
+	user, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	pet, err := s.petStore.Get(ctx, petId)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	mediaLink, err := s.storage.Upload(ctx, &storage.Object{
+		RootDir:     googleStorage.RootBucket,
+		Path:        pet.NewProfilePath(),
+		ContentType: contentType,
+		Bytes:       content,
+	})
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	if err := s.petStore.Update(ctx, petId, map[string]interface{}{photourlField: mediaLink}); err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	pets, err := s.petStore.GetList(ctx, user.Pets)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	return &gonyom.UploadPetProfileReply{
+		Pets: pets.ToProto(),
 	}, nil
 }
