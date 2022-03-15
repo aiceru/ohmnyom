@@ -82,6 +82,15 @@ func NewUser(name, email, hashed string, infos map[string]*OAuthInfo, photourl s
 	return u, nil
 }
 
+func (u *User) HasPet(petId string) bool {
+	for _, p := range u.Pets {
+		if p == petId {
+			return true
+		}
+	}
+	return false
+}
+
 func (u *User) ToProto() *gonyom.Account {
 	infos := make(map[string]*gonyom.OAuthInfo)
 	for provider, info := range u.OAuthInfo {

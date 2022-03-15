@@ -41,6 +41,16 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	newPet := fromProto(request.GetPet())
 	newPet.Id = newPetId()
+	contentType := request.GetProfileContentType()
+	profileImageBytes := request.GetProfilePhoto()
+
+	if profileImageBytes != nil {
+		link, err := s.upload(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
+		if err != nil {
+			return nil, errors.GrpcError(err)
+		}
+		newPet.Photourl = link
+	}
 
 	if err := s.petStore.Put(ctx, newPet); err != nil {
 		return nil, errors.GrpcError(err)
@@ -66,6 +76,16 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest) (*gonyom.UpdatePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	newPet := fromProto(request.GetPet())
+	contentType := request.GetProfileContentType()
+	profileImageBytes := request.GetProfilePhoto()
+
+	if profileImageBytes != nil {
+		link, err := s.upload(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
+		if err != nil {
+			return nil, errors.GrpcError(err)
+		}
+		newPet.Photourl = link
+	}
 
 	if err := s.petStore.Update(ctx, newPet.Id, map[string]interface{}{
 		nameField:     newPet.Name,
@@ -124,43 +144,48 @@ func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListReque
 	}
 
 	return &gonyom.GetPetListReply{
-		Pets: List(pets).ToProto(),
+		Pets: pets.ToProto(),
 	}, nil
 }
 
-func (s *Server) UploadPetProfile(ctx context.Context, request *gonyom.UploadPetProfileRequest) (*gonyom.UploadPetProfileReply, error) {
+func (s *Server) GetPetWithFeeds(ctx context.Context, request *gonyom.GetPetWithFeedsRequest) (*gonyom.GetPetWithFeedsReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	petId := request.GetPetId()
-	contentType := request.GetContentType()
-	content := request.GetContent()
 
-	user, err := s.userStore.Get(ctx, uid)
+	u, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
+	if !u.HasPet(petId) {
+		return nil, errors.GrpcError(errors.NewNotFoundError("pet %v is not belonging to you", petId))
+	}
+
 	pet, err := s.petStore.Get(ctx, petId)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
+
+	// TODO implement feed store
+	// feeds, err := s.feedStore.GetFeeds(ctx, petId)
+
+	return &gonyom.GetPetWithFeedsReply{
+		PetFeeds: &gonyom.PetFeeds{
+			Pet: pet.ToProto(),
+			// TODO: implement feed
+			Feeds: nil,
+		},
+	}, nil
+}
+
+func (s *Server) upload(ctx context.Context, path string, content []byte, contentType string) (string, error) {
 	mediaLink, err := s.storage.Upload(ctx, &storage.Object{
 		RootDir:     googleStorage.RootBucket,
-		Path:        pet.NewProfilePath(),
+		Path:        path,
 		ContentType: contentType,
 		Bytes:       content,
 	})
 	if err != nil {
-		return nil, errors.GrpcError(err)
+		return "", errors.NewInternalError("%v", err)
 	}
-
-	if err := s.petStore.Update(ctx, petId, map[string]interface{}{photourlField: mediaLink}); err != nil {
-		return nil, errors.GrpcError(err)
-	}
-	pets, err := s.petStore.GetList(ctx, user.Pets)
-	if err != nil {
-		return nil, errors.GrpcError(err)
-	}
-
-	return &gonyom.UploadPetProfileReply{
-		Pets: pets.ToProto(),
-	}, nil
+	return mediaLink, nil
 }
