@@ -20,6 +20,7 @@ const (
 	storageSep         = "/"
 	storageDirPet      = "pets"
 	storageDirProfiles = "profiles"
+	storageRoot        = "ohmnyom"
 )
 
 type List []*Pet
@@ -69,6 +70,10 @@ func (p *Pet) ToProto() *gonyom.Pet {
 		Family:   p.Family,
 		Species:  p.Species,
 	}
+}
+
+func (p *Pet) ProfileDir() string {
+	return strings.Join([]string{storageDirPet, p.Id, storageDirProfiles}, storageSep)
 }
 
 func (p *Pet) NewProfilePath() string {

@@ -8,7 +8,6 @@ import (
 	"ohmnyom/i18n"
 	"ohmnyom/internal/errors"
 	"ohmnyom/internal/storage"
-	"ohmnyom/internal/storage/googleStorage"
 )
 
 type Server struct {
@@ -42,7 +41,7 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 	profileImageBytes := request.GetProfilePhoto()
 
 	if profileImageBytes != nil {
-		link, err := s.upload(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
+		link, err := s.uploadStorage(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
 		if err != nil {
 			return nil, errors.GrpcError(err)
 		}
@@ -77,7 +76,7 @@ func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest
 	profileImageBytes := request.GetProfilePhoto()
 
 	if profileImageBytes != nil {
-		link, err := s.upload(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
+		link, err := s.uploadStorage(ctx, newPet.NewProfilePath(), profileImageBytes, contentType)
 		if err != nil {
 			return nil, errors.GrpcError(err)
 		}
@@ -110,6 +109,15 @@ func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest
 func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest) (*gonyom.DeletePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
 	oldPetId := request.GetPetId()
+
+	// delete profile
+	victim, err := s.petStore.Get(ctx, oldPetId)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	if err := s.storage.DeleteDir(ctx, storageRoot, victim.ProfileDir()); err != nil {
+		return nil, errors.GrpcError(err)
+	}
 
 	if err := s.petStore.Delete(ctx, oldPetId); err != nil {
 		return nil, errors.GrpcError(err)
@@ -157,9 +165,9 @@ func (s *Server) GetPet(ctx context.Context, request *gonyom.GetPetRequest) (*go
 	}, nil
 }
 
-func (s *Server) upload(ctx context.Context, path string, content []byte, contentType string) (string, error) {
+func (s *Server) uploadStorage(ctx context.Context, path string, content []byte, contentType string) (string, error) {
 	mediaLink, err := s.storage.Upload(ctx, &storage.Object{
-		RootDir:     googleStorage.RootBucket,
+		Root:        storageRoot,
 		Path:        path,
 		ContentType: contentType,
 		Bytes:       content,

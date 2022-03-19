@@ -7,12 +7,11 @@ import (
 	"os"
 
 	gcs "cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"ohmnyom/internal/errors"
 	"ohmnyom/internal/storage"
 )
-
-const RootBucket = "ohmnyom"
 
 type Storage struct {
 	client *gcs.Client
@@ -35,7 +34,7 @@ func New(ctx context.Context, credentialJsonPath string) storage.Storage {
 }
 
 func (s *Storage) Upload(ctx context.Context, object *storage.Object) (string, error) {
-	wc := s.client.Bucket(object.RootDir).Object(object.Path).NewWriter(ctx)
+	wc := s.client.Bucket(object.Root).Object(object.Path).NewWriter(ctx)
 
 	wc.ContentType = object.ContentType
 	wc.ACL = []gcs.ACLRule{
@@ -49,10 +48,37 @@ func (s *Storage) Upload(ctx context.Context, object *storage.Object) (string, e
 		return "", errors.NewInternalError("%v", err)
 	}
 
-	attrs, err := s.client.Bucket(object.RootDir).Object(object.Path).Attrs(ctx)
+	attrs, err := s.client.Bucket(object.Root).Object(object.Path).Attrs(ctx)
 	if err != nil {
 		return "", nil
 	}
 
 	return attrs.MediaLink, nil
+}
+
+func (s *Storage) Delete(ctx context.Context, root, path string) error {
+	if err := s.client.Bucket(root).Object(path).Delete(ctx); err != nil {
+		return errors.NewInternalError("%v", err)
+	}
+	return nil
+}
+
+func (s *Storage) DeleteDir(ctx context.Context, root, dir string) error {
+	bucket := s.client.Bucket(root)
+	it := bucket.Objects(ctx, &gcs.Query{
+		Prefix: dir,
+	})
+	for {
+		objAttrs, err := it.Next()
+		if err != nil {
+			if err == iterator.Done {
+				break
+			}
+			return errors.NewInternalError("%v", err)
+		}
+		if err := bucket.Object(objAttrs.Name).Delete(ctx); err != nil {
+			return errors.NewInternalError("%v", err)
+		}
+	}
+	return nil
 }
