@@ -13,7 +13,7 @@ import (
 
 const (
 	petCollection = "pets"
-	in            = "in"
+	operatorIn    = "in"
 )
 
 type Store struct {
@@ -42,7 +42,7 @@ func (s *Store) Get(ctx context.Context, id string) (*pet.Pet, error) {
 }
 
 func (s *Store) GetList(ctx context.Context, ids []string) (pet.List, error) {
-	query := s.client.Collection(petCollection).Where("id", in, ids).Documents(ctx)
+	query := s.client.Collection(petCollection).Where("id", operatorIn, ids).Documents(ctx)
 	ret := make([]*pet.Pet, 0)
 	for {
 		doc, err := query.Next()

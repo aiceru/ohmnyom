@@ -7,25 +7,22 @@ import (
 	"ohmnyom/domain/user"
 	"ohmnyom/i18n"
 	"ohmnyom/internal/errors"
-	"ohmnyom/internal/jwt"
 	"ohmnyom/internal/storage"
 	"ohmnyom/internal/storage/googleStorage"
 )
 
 type Server struct {
-	petStore   Store
-	userStore  user.Store
-	storage    storage.Storage
-	jwtManager *jwt.Manager
+	petStore  Store
+	userStore user.Store
+	storage   storage.Storage
 	gonyom.UnimplementedPetApiServer
 }
 
-func NewServer(store Store, userStore user.Store, storage storage.Storage, jwtManager *jwt.Manager) *Server {
+func NewServer(store Store, userStore user.Store, storage storage.Storage) *Server {
 	return &Server{
-		petStore:   store,
-		userStore:  userStore,
-		storage:    storage,
-		jwtManager: jwtManager,
+		petStore:  store,
+		userStore: userStore,
+		storage:   storage,
 	}
 }
 
@@ -148,32 +145,15 @@ func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListReque
 	}, nil
 }
 
-func (s *Server) GetPetWithFeeds(ctx context.Context, request *gonyom.GetPetWithFeedsRequest) (*gonyom.GetPetWithFeedsReply, error) {
-	uid := ctx.Value(user.CtxKeyUid).(string)
+func (s *Server) GetPet(ctx context.Context, request *gonyom.GetPetRequest) (*gonyom.GetPetReply, error) {
 	petId := request.GetPetId()
-
-	u, err := s.userStore.Get(ctx, uid)
-	if err != nil {
-		return nil, errors.GrpcError(err)
-	}
-	if !u.HasPet(petId) {
-		return nil, errors.GrpcError(errors.NewNotFoundError("pet %v is not belonging to you", petId))
-	}
-
 	pet, err := s.petStore.Get(ctx, petId)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
-	// TODO implement feed store
-	// feeds, err := s.feedStore.GetFeeds(ctx, petId)
-
-	return &gonyom.GetPetWithFeedsReply{
-		PetFeeds: &gonyom.PetFeeds{
-			Pet: pet.ToProto(),
-			// TODO: implement feed
-			Feeds: nil,
-		},
+	return &gonyom.GetPetReply{
+		Pet: pet.ToProto(),
 	}, nil
 }
 

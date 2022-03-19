@@ -12,9 +12,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/gzip"
+	"ohmnyom/domain/feed"
 	"ohmnyom/domain/pet"
 	"ohmnyom/domain/user"
 	"ohmnyom/internal/firestore"
+	feedstore "ohmnyom/internal/firestore/feed"
 	petstore "ohmnyom/internal/firestore/pet"
 	userstore "ohmnyom/internal/firestore/user"
 	"ohmnyom/internal/interceptor"
@@ -37,16 +39,12 @@ func printAddress() {
 func main() {
 	ctx := context.Background()
 	gcpCredentialJsonPath := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
-	printAddress()
 
-	// firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
 	firestore.KillEmulator()
-	firestore.RunEmulator()
-	// defer firestore.KillEmulator()
-	firestoreClient := firestore.NewEmulatorClient(ctx)
 
 	jwtManager := jwt.NewManager([]byte("temp-test-secret"))
 	authInterceptor := interceptor.NewAuthInterceptor(
@@ -57,10 +55,12 @@ func main() {
 	)
 	userStore := userstore.New(ctx, firestoreClient)
 	petStore := petstore.New(ctx, firestoreClient)
+	feedStore := feedstore.New(ctx, firestoreClient)
 	storage := googleStorage.New(ctx, gcpCredentialJsonPath)
 
 	userServer := user.NewServer(userStore, jwtManager)
-	petServer := pet.NewServer(petStore, userStore, storage, jwtManager)
+	petServer := pet.NewServer(petStore, userStore, storage)
+	feedServer := feed.NewServer(feedStore, userStore)
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(authInterceptor.Unary()),
@@ -69,6 +69,7 @@ func main() {
 	gonyom.RegisterSignApiServer(grpcServer, userServer)
 	gonyom.RegisterAccountApiServer(grpcServer, userServer)
 	gonyom.RegisterPetApiServer(grpcServer, petServer)
+	gonyom.RegisterFeedApiServer(grpcServer, feedServer)
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {

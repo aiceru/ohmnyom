@@ -13,8 +13,7 @@ import (
 
 const (
 	userCollection = "users"
-	is             = "=="
-	arrayContains  = "array-contains"
+	operatorIs     = "=="
 )
 
 type Store struct {
@@ -43,7 +42,7 @@ func (s *Store) Get(ctx context.Context, id string) (*user.User, error) {
 }
 
 func (s *Store) GetByEmail(ctx context.Context, email string) (*user.User, error) {
-	iter := s.client.Collection(userCollection).Where("email", is, email).Documents(ctx)
+	iter := s.client.Collection(userCollection).Where("email", operatorIs, email).Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -64,7 +63,7 @@ func (s *Store) GetByEmail(ctx context.Context, email string) (*user.User, error
 
 func (s *Store) GetByOAuth(ctx context.Context, info *user.OAuthInfo, provider string) (*user.User, error) {
 	iter := s.client.Collection(userCollection).
-		Where("oauthinfo."+provider, is, info).Documents(ctx)
+		Where("oauthinfo."+provider, operatorIs, info).Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {

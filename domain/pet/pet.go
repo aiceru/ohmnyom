@@ -41,14 +41,6 @@ type Pet struct {
 	Species  string    `firestore:"species,omitempty"`
 }
 
-type Feed struct {
-	PetId      string    `firestore:"petid,omitempty"`
-	Feeded     time.Time `firestore:"feeded"`
-	FeederName string    `firestore:"feeder_name,omitempty"`
-	Amount     float64   `firestore:"amount,omitempty"`
-	Unit       string    `firestore:"unit,omitempty"`
-}
-
 func IsUpdatableField(field string) bool {
 	return field != "Id"
 }
