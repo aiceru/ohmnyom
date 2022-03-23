@@ -5,7 +5,7 @@ go 1.17
 require (
 	cloud.google.com/go/firestore v1.6.1
 	cloud.google.com/go/storage v1.10.0
-	github.com/aiceru/protonyom v0.9.0
+	github.com/aiceru/protonyom v0.9.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/rs/xid v1.3.0
 	github.com/stretchr/testify v1.7.0
@@ -35,5 +35,3 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
-
-replace github.com/aiceru/protonyom => ../protonyom

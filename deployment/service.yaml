@@ -1,0 +1,9 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ohmnyom-grpc-server
+spec:
+  template:
+    spec:
+      containers:
+        - image: asia-northeast3-docker.pkg.dev/ohmnyom/server/ohmnyom:latest

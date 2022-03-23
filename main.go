@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -38,8 +39,12 @@ func printAddress() {
 
 func main() {
 	ctx := context.Background()
-	gcpCredentialJsonPath := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
+	gcpCredentialJsonPath := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
 	firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
 	if err != nil {
 		log.Fatal(err)
@@ -74,7 +79,7 @@ func main() {
 	gonyom.RegisterPetApiServer(grpcServer, petServer)
 	gonyom.RegisterFeedApiServer(grpcServer, feedServer)
 
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatal(err)
 	}
