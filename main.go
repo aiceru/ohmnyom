@@ -40,14 +40,14 @@ func main() {
 	ctx := context.Background()
 	gcpCredentialJsonPath := filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json")
 
-	// firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	firestore.KillEmulator()
-	firestore.RunEmulator()
-	defer firestore.KillEmulator()
-	firestoreClient := firestore.NewEmulatorClient(ctx)
+	firestoreClient, err := firestore.NewClient(ctx, "ohmnyom", filepath.Join(path.Root(), "assets", "ohmnyom-77df675cb827.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	// firestore.KillEmulator()
+	// firestore.RunEmulator()
+	// defer firestore.KillEmulator()
+	// firestoreClient := firestore.NewEmulatorClient(ctx)
 
 	jwtManager := jwt.NewManager([]byte("temp-test-secret"))
 	authInterceptor := interceptor.NewAuthInterceptor(

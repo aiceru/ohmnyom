@@ -222,6 +222,29 @@ func (s *Server) Update(ctx context.Context, request *gonyom.UpdateAccountReques
 	return &gonyom.UpdateAccountReply{Account: user.ToProto()}, nil
 }
 
+func (s *Server) AcceptInvite(ctx context.Context, request *gonyom.AcceptInviteRequest) (*gonyom.AcceptInviteReply, error) {
+	uid := ctx.Value(CtxKeyUid).(string)
+	pid := request.GetPetId()
+	if uid == "" || pid == "" {
+		return nil, errors.GrpcError(errors.NewAuthenticationError("UID or PID not provided"))
+	}
+	_, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	err = s.userStore.AddPet(ctx, uid, pid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	user, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+	return &gonyom.AcceptInviteReply{Account: user.ToProto()}, nil
+}
+
 func (s *Server) Delete(ctx context.Context, request *gonyom.DeleteAccountRequest) (*gonyom.DeleteAccountReply, error) {
 	// TODO implement me
 	panic("implement me")
