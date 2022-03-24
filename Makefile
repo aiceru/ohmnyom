@@ -19,3 +19,5 @@ deploy :
 	gcloud config set run/region asia-northeast3
 	gcloud run deploy $(SERVICE) --image=$(REPOSITORY)/$(IMAGE):latest && \
 	gcloud run services update-traffic $(SERVICE) --to-latest
+
+all : build push deploy

@@ -3,7 +3,6 @@ package interceptor
 import (
 	"context"
 	"log"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -37,12 +36,12 @@ func (i *AuthInterceptor) authorize(ctx context.Context) (string, error) {
 		return "", errors.NewAuthenticationError("metadata is not provided")
 	}
 
-	values := md["authorization"]
+	values := md["user-auth"]
 	if len(values) == 0 {
 		return "", errors.NewAuthenticationError("authorization token is not provided")
 	}
 
-	accessToken := strings.Replace(values[0], "Bearer ", "", 1)
+	accessToken := values[0]
 	uid, err := i.jwtManager.Verify(accessToken)
 	if err != nil {
 		return "", err
