@@ -11,8 +11,8 @@ const (
 	subjectAuth    = "ohmnyom-auth"
 	subjectRefresh = "ohmnyom-refresh"
 	tokenIssuer    = "ohmnyom-admin-aiceru"
-	expAuth        = time.Hour + 5*time.Minute
-	expRefresh     = time.Hour * 24 * 7
+	expAuth        = time.Hour * 24
+	expRefresh     = time.Hour * 24 * 30
 )
 
 type Manager struct {

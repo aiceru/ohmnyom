@@ -49,10 +49,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// firestore.KillEmulator()
-	// firestore.RunEmulator()
-	// defer firestore.KillEmulator()
-	// firestoreClient := firestore.NewEmulatorClient(ctx)
 
 	jwtManager := jwt.NewManager([]byte("temp-test-secret"))
 	authInterceptor := interceptor.NewAuthInterceptor(
