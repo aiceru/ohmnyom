@@ -3,7 +3,7 @@ FROM golang:latest as builder
 WORKDIR /app
 COPY . ./
 
-RUN go build -v -o server
+RUN go build -v -o server cmd/ohmnyom/main.go
 
 FROM gcr.io/distroless/base:latest
 

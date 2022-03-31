@@ -101,3 +101,31 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+func (s *Store) AddFeeder(ctx context.Context, id, uid string) error {
+	if id == "" || uid == "" {
+		return errors.NewInvalidParamError("id: %v, uid: %v", id, uid)
+	}
+	_, err := s.client.Collection(petCollection).Doc(id).Update(ctx,
+		[]firestore.Update{
+			{Path: "pets", Value: firestore.ArrayUnion(uid)},
+		})
+	if err != nil {
+		return errors.New("%v", err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteFeeder(ctx context.Context, id, uid string) error {
+	if id == "" || uid == "" {
+		return errors.NewInvalidParamError("id: %v, uid: %v", id, uid)
+	}
+	_, err := s.client.Collection(petCollection).Doc(id).Update(ctx,
+		[]firestore.Update{
+			{Path: "feeders", Value: firestore.ArrayRemove(uid)},
+		})
+	if err != nil {
+		return errors.New("%v", err)
+	}
+	return nil
+}

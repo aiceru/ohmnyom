@@ -1,31 +1,33 @@
-package pet
+package servers
 
 import (
 	"context"
 
 	"github.com/aiceru/protonyom/gonyom"
+	"ohmnyom/domain/pet"
 	"ohmnyom/domain/user"
 	"ohmnyom/i18n"
 	"ohmnyom/internal/errors"
 	"ohmnyom/internal/storage"
+	"ohmnyom/internal/util"
 )
 
-type Server struct {
-	petStore  Store
+type PetServer struct {
+	petStore  pet.Store
 	userStore user.Store
 	storage   storage.Storage
 	gonyom.UnimplementedPetApiServer
 }
 
-func NewServer(store Store, userStore user.Store, storage storage.Storage) *Server {
-	return &Server{
+func NewPetServer(store pet.Store, userStore user.Store, storage storage.Storage) *PetServer {
+	return &PetServer{
 		petStore:  store,
 		userStore: userStore,
 		storage:   storage,
 	}
 }
 
-func (s *Server) GetFamilies(ctx context.Context, request *gonyom.GetFamiliesRequest) (*gonyom.GetFamiliesReply, error) {
+func (s *PetServer) GetFamilies(ctx context.Context, request *gonyom.GetFamiliesRequest) (*gonyom.GetFamiliesReply, error) {
 	lang := i18n.SupportOrFallback(request.GetLanguage())
 	families := i18n.SupportedFamilies[lang]
 	return &gonyom.GetFamiliesReply{
@@ -33,10 +35,17 @@ func (s *Server) GetFamilies(ctx context.Context, request *gonyom.GetFamiliesReq
 	}, nil
 }
 
-func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*gonyom.AddPetReply, error) {
+func (s *PetServer) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*gonyom.AddPetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
-	newPet := fromProto(request.GetPet())
-	newPet.Id = newPetId()
+	u, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	newPet := pet.FromProto(request.GetPet())
+	newPet.Id = pet.NewPetId()
+	newPet.Feeders = []string{u.Id}
+
 	contentType := request.GetProfileContentType()
 	profileImageBytes := request.GetProfilePhoto()
 
@@ -51,11 +60,11 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 	if err := s.petStore.Put(ctx, newPet); err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	if err := s.userStore.AddPet(ctx, uid, newPet.Id); err != nil {
+	if err := s.userStore.AddPet(ctx, u.Id, newPet.Id); err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
-	account, err := s.userStore.Get(ctx, uid)
+	account, err := s.userStore.Get(ctx, u.Id)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
@@ -69,9 +78,14 @@ func (s *Server) AddPet(ctx context.Context, request *gonyom.AddPetRequest) (*go
 	}, nil
 }
 
-func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest) (*gonyom.UpdatePetReply, error) {
+func (s *PetServer) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest) (*gonyom.UpdatePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
-	newPet := fromProto(request.GetPet())
+	u, err := s.userStore.Get(ctx, uid)
+	if err != nil {
+		return nil, errors.GrpcError(err)
+	}
+
+	newPet := pet.FromProto(request.GetPet())
 	contentType := request.GetProfileContentType()
 	profileImageBytes := request.GetProfilePhoto()
 
@@ -84,16 +98,16 @@ func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest
 	}
 
 	if err := s.petStore.Update(ctx, newPet.Id, map[string]interface{}{
-		nameField:     newPet.Name,
-		photourlField: newPet.Photourl,
-		adoptedField:  newPet.Adopted,
-		familyField:   newPet.Family,
-		speciesField:  newPet.Species,
+		pet.NameField:     newPet.Name,
+		pet.PhotourlField: newPet.Photourl,
+		pet.AdoptedField:  newPet.Adopted,
+		pet.FamilyField:   newPet.Family,
+		pet.SpeciesField:  newPet.Species,
 	}); err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
-	account, err := s.userStore.Get(ctx, uid)
+	account, err := s.userStore.Get(ctx, u.Id)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
@@ -106,24 +120,43 @@ func (s *Server) UpdatePet(ctx context.Context, request *gonyom.UpdatePetRequest
 	}, nil
 }
 
-func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest) (*gonyom.DeletePetReply, error) {
+func (s *PetServer) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest) (*gonyom.DeletePetReply, error) {
 	uid := ctx.Value(user.CtxKeyUid).(string)
-	oldPetId := request.GetPetId()
-
-	// delete profile
-	victim, err := s.petStore.Get(ctx, oldPetId)
+	u, err := s.userStore.Get(ctx, uid)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	if err := s.storage.DeleteDir(ctx, storageRoot, victim.ProfileDir()); err != nil {
+
+	petId := request.GetPetId()
+	if !u.HasPet(petId) {
+		return nil, errors.GrpcError(errors.NewNotFoundError("pet id %s from pet list of user %s"))
+	}
+
+	p, err := s.petStore.Get(ctx, petId)
+	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
-	if err := s.petStore.Delete(ctx, oldPetId); err != nil {
+	// delete pet id from user doc
+	if err := s.userStore.DeletePet(ctx, uid, petId); err != nil {
 		return nil, errors.GrpcError(err)
 	}
-	if err := s.userStore.DeletePet(ctx, uid, oldPetId); err != nil {
-		return nil, errors.GrpcError(err)
+
+	p.Feeders = util.Remove(p.Feeders, u.Id)
+	if len(p.Feeders) == 0 {
+		// delete from firestore
+		if err := s.petStore.Delete(ctx, petId); err != nil {
+			return nil, errors.GrpcError(err)
+		}
+		// delete profile
+		if err := s.storage.DeleteDir(ctx, pet.StorageRoot, p.ProfileDir()); err != nil {
+			return nil, errors.GrpcError(err)
+		}
+	} else {
+		// update pet doc
+		if err := s.petStore.DeleteFeeder(ctx, petId, uid); err != nil {
+			return nil, errors.GrpcError(err)
+		}
 	}
 
 	account, err := s.userStore.Get(ctx, uid)
@@ -140,7 +173,7 @@ func (s *Server) DeletePet(ctx context.Context, request *gonyom.DeletePetRequest
 	}, nil
 }
 
-func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListRequest) (*gonyom.GetPetListReply, error) {
+func (s *PetServer) GetPetList(ctx context.Context, request *gonyom.GetPetListRequest) (*gonyom.GetPetListReply, error) {
 	petIds := request.GetPetIds()
 
 	pets, err := s.petStore.GetList(ctx, petIds)
@@ -153,21 +186,21 @@ func (s *Server) GetPetList(ctx context.Context, request *gonyom.GetPetListReque
 	}, nil
 }
 
-func (s *Server) GetPet(ctx context.Context, request *gonyom.GetPetRequest) (*gonyom.GetPetReply, error) {
+func (s *PetServer) GetPet(ctx context.Context, request *gonyom.GetPetRequest) (*gonyom.GetPetReply, error) {
 	petId := request.GetPetId()
-	pet, err := s.petStore.Get(ctx, petId)
+	p, err := s.petStore.Get(ctx, petId)
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
 
 	return &gonyom.GetPetReply{
-		Pet: pet.ToProto(),
+		Pet: p.ToProto(),
 	}, nil
 }
 
-func (s *Server) uploadStorage(ctx context.Context, path string, content []byte, contentType string) (string, error) {
+func (s *PetServer) uploadStorage(ctx context.Context, path string, content []byte, contentType string) (string, error) {
 	mediaLink, err := s.storage.Upload(ctx, &storage.Object{
-		Root:        storageRoot,
+		Root:        pet.StorageRoot,
 		Path:        path,
 		ContentType: contentType,
 		Bytes:       content,

@@ -2,6 +2,8 @@ package user
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aiceru/protonyom/gonyom"
@@ -16,6 +18,11 @@ const CtxKeyUid = internal.ContextKey("uid")
 const (
 	OAuthProviderGoogle = "google"
 	OAuthProviderKakao  = "kakao"
+
+	storageSep         = "/"
+	storageDirUser     = "users"
+	storageDirProfiles = "profiles"
+	StorageRoot        = "ohmnyom"
 )
 
 type OAuthInfo struct {
@@ -91,6 +98,15 @@ func (u *User) HasPet(petId string) bool {
 	return false
 }
 
+func (u *User) ProfileDir() string {
+	return strings.Join([]string{storageDirUser, u.Id, storageDirProfiles}, storageSep)
+}
+
+func (u *User) NewProfilePath() string {
+	timeStr := strconv.FormatInt(time.Now().UTC().UnixNano(), 16)
+	return strings.Join([]string{storageDirUser, u.Id, storageDirProfiles, timeStr}, storageSep)
+}
+
 func (u *User) ToProto() *gonyom.Account {
 	infos := make(map[string]*gonyom.OAuthInfo)
 	for provider, info := range u.OAuthInfo {
@@ -134,7 +150,7 @@ func genUid() string {
 	return xid.New().String()
 }
 
-func hashPassword(password string) (string, error) {
+func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", errors.NewInternalError("%v", err)
@@ -142,7 +158,7 @@ func hashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-func compareHashAndPassword(hashed string, plain string) error {
+func CompareHashAndPassword(hashed string, plain string) error {
 	if err := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(plain)); err != nil {
 		return errors.NewAuthenticationError("password not mateched")
 	}

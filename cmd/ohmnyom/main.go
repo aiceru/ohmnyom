@@ -13,9 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/gzip"
-	"ohmnyom/domain/feed"
-	"ohmnyom/domain/pet"
-	"ohmnyom/domain/user"
+	"ohmnyom/cmd/ohmnyom/servers"
 	"ohmnyom/internal/firestore"
 	feedstore "ohmnyom/internal/firestore/feed"
 	petstore "ohmnyom/internal/firestore/pet"
@@ -62,9 +60,9 @@ func main() {
 	feedStore := feedstore.New(ctx, firestoreClient)
 	storage := googleStorage.New(ctx, gcpCredentialJsonPath)
 
-	userServer := user.NewServer(userStore, jwtManager)
-	petServer := pet.NewServer(petStore, userStore, storage)
-	feedServer := feed.NewServer(feedStore, userStore)
+	userServer := servers.NewUserServer(userStore, petStore, storage, jwtManager)
+	petServer := servers.NewPetServer(petStore, userStore, storage)
+	feedServer := servers.NewFeedServer(feedStore, userStore)
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(authInterceptor.Unary()),

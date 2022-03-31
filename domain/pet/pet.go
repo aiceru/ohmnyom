@@ -11,16 +11,16 @@ import (
 )
 
 const (
-	nameField     = "name"
-	photourlField = "photourl"
-	adoptedField  = "adopted"
-	familyField   = "family"
-	speciesField  = "species"
+	NameField     = "name"
+	PhotourlField = "photourl"
+	AdoptedField  = "adopted"
+	FamilyField   = "family"
+	SpeciesField  = "species"
 
 	storageSep         = "/"
 	storageDirPet      = "pets"
 	storageDirProfiles = "profiles"
-	storageRoot        = "ohmnyom"
+	StorageRoot        = "ohmnyom"
 )
 
 type List []*Pet
@@ -40,17 +40,18 @@ type Pet struct {
 	Adopted  time.Time `firestore:"adopted"`
 	Family   string    `firestore:"family,omitempty"`
 	Species  string    `firestore:"species,omitempty"`
+	Feeders  []string  `firestore:"feeders,omitempty"`
 }
 
 func IsUpdatableField(field string) bool {
 	return field != "Id"
 }
 
-func newPetId() string {
+func NewPetId() string {
 	return xid.New().String()
 }
 
-func fromProto(p *gonyom.Pet) *Pet {
+func FromProto(p *gonyom.Pet) *Pet {
 	return &Pet{
 		Id:       p.Id,
 		Name:     p.Name,
@@ -58,6 +59,7 @@ func fromProto(p *gonyom.Pet) *Pet {
 		Adopted:  time.Unix(p.Adopted, 0),
 		Family:   p.Family,
 		Species:  p.Species,
+		Feeders:  p.Feeders,
 	}
 }
 
@@ -69,6 +71,7 @@ func (p *Pet) ToProto() *gonyom.Pet {
 		Adopted:  p.Adopted.Unix(),
 		Family:   p.Family,
 		Species:  p.Species,
+		Feeders:  p.Feeders,
 	}
 }
 
@@ -87,4 +90,6 @@ type Store interface {
 	Put(ctx context.Context, pet *Pet) error
 	Update(ctx context.Context, id string, pathValues map[string]interface{}) error
 	Delete(ctx context.Context, id string) error
+	AddFeeder(ctx context.Context, id, uid string) error
+	DeleteFeeder(ctx context.Context, id, uid string) error
 }

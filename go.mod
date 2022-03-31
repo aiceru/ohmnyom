@@ -5,7 +5,7 @@ go 1.17
 require (
 	cloud.google.com/go/firestore v1.6.1
 	cloud.google.com/go/storage v1.10.0
-	github.com/aiceru/protonyom v0.9.1
+	github.com/aiceru/protonyom v1.0.3
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/rs/xid v1.3.0
 	github.com/stretchr/testify v1.7.0

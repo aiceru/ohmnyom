@@ -1,31 +1,32 @@
-package feed
+package servers
 
 import (
 	"context"
 	"time"
 
 	"github.com/aiceru/protonyom/gonyom"
+	"ohmnyom/domain/feed"
 	"ohmnyom/domain/user"
 	"ohmnyom/internal/errors"
 )
 
-type Server struct {
-	feedStore Store
+type FeedServer struct {
+	feedStore feed.Store
 	userStore user.Store
 	gonyom.UnimplementedFeedApiServer
 }
 
-func NewServer(store Store, userStore user.Store) *Server {
-	return &Server{
+func NewFeedServer(store feed.Store, userStore user.Store) *FeedServer {
+	return &FeedServer{
 		feedStore: store,
 		userStore: userStore,
 	}
 }
 
-func (s *Server) AddFeed(ctx context.Context, request *gonyom.AddFeedRequest) (*gonyom.AddFeedReply, error) {
+func (s *FeedServer) AddFeed(ctx context.Context, request *gonyom.AddFeedRequest) (*gonyom.AddFeedReply, error) {
 	// uid := ctx.Value(user.CtxKeyUid).(string)
 	// TODO user check??
-	newFeed, err := NewFromProto(request.GetFeed())
+	newFeed, err := feed.NewFromProto(request.GetFeed())
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
@@ -49,7 +50,7 @@ func (s *Server) AddFeed(ctx context.Context, request *gonyom.AddFeedRequest) (*
 	}, nil
 }
 
-func (s *Server) GetFeeds(ctx context.Context, request *gonyom.GetFeedsRequest) (*gonyom.GetFeedsReply, error) {
+func (s *FeedServer) GetFeeds(ctx context.Context, request *gonyom.GetFeedsRequest) (*gonyom.GetFeedsReply, error) {
 	petId := request.GetPetId()
 	startAfter := time.Unix(request.GetStartAfter(), 0)
 	limit := request.GetLimit()
@@ -72,7 +73,7 @@ func (s *Server) GetFeeds(ctx context.Context, request *gonyom.GetFeedsRequest) 
 	}, nil
 }
 
-func (s *Server) DeleteFeed(ctx context.Context, request *gonyom.DeleteFeedRequest) (*gonyom.DeleteFeedReply, error) {
+func (s *FeedServer) DeleteFeed(ctx context.Context, request *gonyom.DeleteFeedRequest) (*gonyom.DeleteFeedReply, error) {
 	petId := request.GetPetId()
 	feedId := request.GetFeedId()
 
@@ -82,8 +83,8 @@ func (s *Server) DeleteFeed(ctx context.Context, request *gonyom.DeleteFeedReque
 	return &gonyom.DeleteFeedReply{}, nil
 }
 
-func (s *Server) UpdateFeed(ctx context.Context, request *gonyom.UpdateFeedRequest) (*gonyom.UpdateFeedReply, error) {
-	newFeed, err := FromProto(request.GetFeed())
+func (s *FeedServer) UpdateFeed(ctx context.Context, request *gonyom.UpdateFeedRequest) (*gonyom.UpdateFeedReply, error) {
+	newFeed, err := feed.FromProto(request.GetFeed())
 	if err != nil {
 		return nil, errors.GrpcError(err)
 	}
