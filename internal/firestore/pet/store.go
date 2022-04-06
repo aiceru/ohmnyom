@@ -108,7 +108,7 @@ func (s *Store) AddFeeder(ctx context.Context, id, uid string) error {
 	}
 	_, err := s.client.Collection(petCollection).Doc(id).Update(ctx,
 		[]firestore.Update{
-			{Path: "pets", Value: firestore.ArrayUnion(uid)},
+			{Path: "feeders", Value: firestore.ArrayUnion(uid)},
 		})
 	if err != nil {
 		return errors.New("%v", err)
